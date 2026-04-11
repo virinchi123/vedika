@@ -19,6 +19,10 @@ const authRateLimit = createRateLimitMiddleware({
   maxRequests: appConfig.authRateLimitMaxRequests,
 });
 
+export const resetAuthRateLimit = (): void => {
+  authRateLimit.reset();
+};
+
 authRouter.post(
   "/register",
   authRateLimit,

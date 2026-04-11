@@ -3,6 +3,7 @@ import { after, beforeEach, describe, it } from "node:test";
 
 import request from "supertest";
 
+import { resetAuthRateLimit } from "../src/auth/auth.router.js";
 import { hashPassword } from "../src/auth/password.js";
 import { app } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
@@ -48,10 +49,12 @@ const resetDatabase = async () => {
 };
 
 beforeEach(async () => {
+  resetAuthRateLimit();
   await resetDatabase();
 });
 
 after(async () => {
+  resetAuthRateLimit();
   await resetDatabase();
   await prisma.$disconnect();
 });

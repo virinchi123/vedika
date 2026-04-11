@@ -1,6 +1,7 @@
 import { Prisma } from "../generated/prisma/client.js";
 
 import { appConfig } from "../config/app.js";
+import { findUniqueConstraintMessage } from "../lib/prisma-errors.js";
 import { prisma } from "../lib/prisma.js";
 import type { AuthenticatedRequestUser, PublicUser } from "./auth.types.js";
 import { HttpError } from "./http-error.js";
@@ -100,41 +101,9 @@ const buildAuthResponse = async ({
   };
 };
 
-const hasUniqueConstraintField = (error: Prisma.PrismaClientKnownRequestError, fieldName: string): boolean => {
-  const legacyTarget = error.meta?.target;
-  if (Array.isArray(legacyTarget) && legacyTarget.includes(fieldName)) {
-    return true;
-  }
-
-  const adapterConstraintFields =
-    typeof error.meta === "object" &&
-    error.meta !== null &&
-    "driverAdapterError" in error.meta &&
-    typeof error.meta.driverAdapterError === "object" &&
-    error.meta.driverAdapterError !== null &&
-    "cause" in error.meta.driverAdapterError &&
-    typeof error.meta.driverAdapterError.cause === "object" &&
-    error.meta.driverAdapterError.cause !== null &&
-    "constraint" in error.meta.driverAdapterError.cause &&
-    typeof error.meta.driverAdapterError.cause.constraint === "object" &&
-    error.meta.driverAdapterError.cause.constraint !== null &&
-    "fields" in error.meta.driverAdapterError.cause.constraint
-      ? error.meta.driverAdapterError.cause.constraint.fields
-      : undefined;
-
-  return (
-    Array.isArray(adapterConstraintFields) &&
-    adapterConstraintFields.some((value) => value === fieldName || value === `"${fieldName}"`)
-  );
-};
-
-const isUniqueEmailConstraintError = (error: unknown): boolean => {
-  return (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === "P2002" &&
-    hasUniqueConstraintField(error, "emailAddress")
-  );
-};
+const registerUserConflictMessages = {
+  emailAddress: "An account with that email already exists.",
+} as const;
 
 export const registerUser = async ({
   emailAddress,
@@ -166,8 +135,9 @@ export const registerUser = async ({
 
     return buildAuthResponse(result);
   } catch (error) {
-    if (isUniqueEmailConstraintError(error)) {
-      throw new HttpError(409, "An account with that email already exists.");
+    const conflictMessage = findUniqueConstraintMessage(error, registerUserConflictMessages);
+    if (conflictMessage !== null) {
+      throw new HttpError(409, conflictMessage);
     }
 
     throw error;

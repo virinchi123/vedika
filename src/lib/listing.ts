@@ -14,6 +14,11 @@ export type CursorPageParams<TCursor> = {
   cursor: TCursor | null;
 };
 
+export type CreatedAtCursor = {
+  createdAt: Date;
+  id: string;
+};
+
 export type PageInfo = {
   limit: number;
   hasNextPage: boolean;
@@ -86,6 +91,70 @@ export const decodeCursor = <TCursor>(value: string, fieldName: string): TCursor
   } catch {
     throw new HttpError(400, `${fieldName} must be a valid cursor.`);
   }
+};
+
+export const parseCreatedAtCursor = (value: string, fieldName = "cursor"): CreatedAtCursor => {
+  const decodedCursor = decodeCursor<Record<string, unknown>>(value, fieldName);
+  const id = parseOptionalQueryString(decodedCursor.id, `${fieldName}.id`);
+
+  if (id === null || !id.trim()) {
+    throw new HttpError(400, `${fieldName}.id is required.`);
+  }
+
+  if (typeof decodedCursor.createdAt !== "string") {
+    throw new HttpError(400, `${fieldName} must be a valid cursor.`);
+  }
+
+  const createdAt = new Date(decodedCursor.createdAt);
+
+  if (Number.isNaN(createdAt.getTime())) {
+    throw new HttpError(400, `${fieldName} must be a valid cursor.`);
+  }
+
+  return {
+    createdAt,
+    id: id.trim(),
+  };
+};
+
+export const buildCreatedAtDescCursorWhere = (cursor: CreatedAtCursor | null) => {
+  if (cursor === null) {
+    return undefined;
+  }
+
+  return {
+    OR: [
+      {
+        createdAt: {
+          lt: cursor.createdAt,
+        },
+      },
+      {
+        createdAt: cursor.createdAt,
+        id: {
+          lt: cursor.id,
+        },
+      },
+    ],
+  };
+};
+
+export const buildCreatedAtDescCursorOrderBy = () => {
+  return [
+    {
+      createdAt: "desc" as const,
+    },
+    {
+      id: "desc" as const,
+    },
+  ];
+};
+
+export const getCreatedAtCursor = <TItem extends CreatedAtCursor>(item: TItem): CreatedAtCursor => {
+  return {
+    createdAt: item.createdAt,
+    id: item.id,
+  };
 };
 
 export const buildCursorPage = <TItem, TCursor>({

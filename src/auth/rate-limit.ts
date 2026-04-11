@@ -7,16 +7,20 @@ type RateLimitEntry = {
   expiresAt: number;
 };
 
+export type ResettableRateLimitMiddleware = RequestHandler & {
+  reset: () => void;
+};
+
 export const createRateLimitMiddleware = ({
   windowMs,
   maxRequests,
 }: {
   windowMs: number;
   maxRequests: number;
-}): RequestHandler => {
+}): ResettableRateLimitMiddleware => {
   const entries = new Map<string, RateLimitEntry>();
 
-  return (request, _response, next) => {
+  const middleware: ResettableRateLimitMiddleware = (request, _response, next) => {
     const now = Date.now();
 
     for (const [key, entry] of entries) {
@@ -45,4 +49,10 @@ export const createRateLimitMiddleware = ({
     entry.count += 1;
     next();
   };
+
+  middleware.reset = () => {
+    entries.clear();
+  };
+
+  return middleware;
 };

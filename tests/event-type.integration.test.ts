@@ -43,6 +43,7 @@ const assertSafeTestDatabase = async (): Promise<void> => {
 
 const resetDatabase = async () => {
   await assertSafeTestDatabase();
+  await prisma.eventType.deleteMany();
   await prisma.serviceProvider.deleteMany();
   await prisma.session.deleteMany();
   await prisma.user.deleteMany();
@@ -56,8 +57,8 @@ const registerAndAuthenticate = async (): Promise<string> => {
   return registration.body.accessToken as string;
 };
 
-const createServiceProviderRecord = async (name: string, createdAt: string) => {
-  return prisma.serviceProvider.create({
+const createEventTypeRecord = async (name: string, createdAt: string) => {
+  return prisma.eventType.create({
     data: {
       name,
       createdAt: new Date(createdAt),
@@ -76,15 +77,15 @@ after(async () => {
   await prisma.$disconnect();
 });
 
-describe("service provider routes", () => {
-  it("lists service providers with cursor pagination", async () => {
+describe("event type routes", () => {
+  it("lists event types with cursor pagination", async () => {
     const accessToken = await registerAndAuthenticate();
-    await createServiceProviderRecord("Oldest Services", "2026-04-10T10:00:00.000Z");
-    await createServiceProviderRecord("Middle Services", "2026-04-11T10:00:00.000Z");
-    const newestServiceProvider = await createServiceProviderRecord("Newest Services", "2026-04-12T10:00:00.000Z");
+    await createEventTypeRecord("Oldest Event", "2026-04-10T10:00:00.000Z");
+    await createEventTypeRecord("Middle Event", "2026-04-11T10:00:00.000Z");
+    const newestEventType = await createEventTypeRecord("Newest Event", "2026-04-12T10:00:00.000Z");
 
     const response = await api
-      .get("/service-providers")
+      .get("/event-types")
       .query({
         limit: "2",
       })
@@ -92,23 +93,23 @@ describe("service provider routes", () => {
 
     assert.equal(response.status, 200);
     assert.deepEqual(
-      response.body.serviceProviders.map((serviceProvider: { name: string }) => serviceProvider.name),
-      ["Newest Services", "Middle Services"],
+      response.body.eventTypes.map((eventType: { name: string }) => eventType.name),
+      ["Newest Event", "Middle Event"],
     );
     assert.equal(response.body.pageInfo.limit, 2);
     assert.equal(response.body.pageInfo.hasNextPage, true);
     assert.ok(typeof response.body.pageInfo.nextCursor === "string");
-    assert.equal(response.body.serviceProviders[0].id, newestServiceProvider.id);
+    assert.equal(response.body.eventTypes[0].id, newestEventType.id);
   });
 
   it("lists the next page when a cursor is provided", async () => {
     const accessToken = await registerAndAuthenticate();
-    await createServiceProviderRecord("Oldest Services", "2026-04-10T10:00:00.000Z");
-    await createServiceProviderRecord("Middle Services", "2026-04-11T10:00:00.000Z");
-    await createServiceProviderRecord("Newest Services", "2026-04-12T10:00:00.000Z");
+    await createEventTypeRecord("Oldest Event", "2026-04-10T10:00:00.000Z");
+    await createEventTypeRecord("Middle Event", "2026-04-11T10:00:00.000Z");
+    await createEventTypeRecord("Newest Event", "2026-04-12T10:00:00.000Z");
 
     const firstPageResponse = await api
-      .get("/service-providers")
+      .get("/event-types")
       .query({
         limit: "1",
       })
@@ -118,7 +119,7 @@ describe("service provider routes", () => {
     assert.ok(typeof firstPageResponse.body.pageInfo.nextCursor === "string");
 
     const response = await api
-      .get("/service-providers")
+      .get("/event-types")
       .query({
         limit: "1",
         cursor: firstPageResponse.body.pageInfo.nextCursor,
@@ -127,8 +128,8 @@ describe("service provider routes", () => {
 
     assert.equal(response.status, 200);
     assert.deepEqual(
-      response.body.serviceProviders.map((serviceProvider: { name: string }) => serviceProvider.name),
-      ["Middle Services"],
+      response.body.eventTypes.map((eventType: { name: string }) => eventType.name),
+      ["Middle Event"],
     );
     assert.equal(response.body.pageInfo.limit, 1);
     assert.equal(response.body.pageInfo.hasNextPage, true);
@@ -136,7 +137,7 @@ describe("service provider routes", () => {
   });
 
   it("rejects unauthenticated list requests", async () => {
-    const response = await api.get("/service-providers");
+    const response = await api.get("/event-types");
 
     assert.equal(response.status, 401);
     assert.equal(response.body.error, "Invalid or missing access token.");
@@ -146,7 +147,7 @@ describe("service provider routes", () => {
     const accessToken = await registerAndAuthenticate();
 
     const invalidLimitResponse = await api
-      .get("/service-providers")
+      .get("/event-types")
       .query({
         limit: "0",
       })
@@ -156,7 +157,7 @@ describe("service provider routes", () => {
     assert.equal(invalidLimitResponse.body.error, "limit must be a positive integer.");
 
     const invalidCursorResponse = await api
-      .get("/service-providers")
+      .get("/event-types")
       .query({
         cursor: "not-a-valid-cursor",
       })
@@ -166,158 +167,199 @@ describe("service provider routes", () => {
     assert.equal(invalidCursorResponse.body.error, "cursor must be a valid cursor.");
   });
 
-  it("creates a service provider for an authenticated request", async () => {
+  it("creates an event type for an authenticated request", async () => {
     const accessToken = await registerAndAuthenticate();
 
     const response = await api
-      .post("/service-providers")
+      .post("/event-types")
       .set("Authorization", `Bearer ${accessToken}`)
       .send({
-        name: "Acme Services",
-        phoneNumber: " +91 98765 43210 ",
-        email: " CONTACT@ACME.COM ",
+        name: "  Conference  ",
       });
 
     assert.equal(response.status, 201);
-    assert.equal(response.body.serviceProvider.name, "Acme Services");
-    assert.equal(response.body.serviceProvider.phoneNumber, "+91 98765 43210");
-    assert.equal(response.body.serviceProvider.email, "contact@acme.com");
+    assert.equal(response.body.eventType.name, "Conference");
 
-    const serviceProvider = await prisma.serviceProvider.findUnique({
+    const eventType = await prisma.eventType.findUnique({
       where: {
-        id: response.body.serviceProvider.id,
+        id: response.body.eventType.id,
       },
     });
 
-    assert.ok(serviceProvider);
-    assert.equal(serviceProvider.name, "Acme Services");
+    assert.ok(eventType);
+    assert.equal(eventType.name, "Conference");
   });
 
   it("rejects unauthenticated create requests", async () => {
-    const response = await api.post("/service-providers").send({
-      name: "Acme Services",
+    const response = await api.post("/event-types").send({
+      name: "Conference",
     });
 
     assert.equal(response.status, 401);
     assert.equal(response.body.error, "Invalid or missing access token.");
   });
 
-  it("updates a service provider with a full replacement payload", async () => {
+  it("updates an event type with a full replacement payload", async () => {
     const accessToken = await registerAndAuthenticate();
-    const existingServiceProvider = await prisma.serviceProvider.create({
+    const existingEventType = await prisma.eventType.create({
       data: {
-        name: "Acme Services",
-        phoneNumber: "1111111111",
-        email: "old@example.com",
+        name: "Conference",
       },
     });
 
     const response = await api
-      .put(`/service-providers/${existingServiceProvider.id}`)
+      .put(`/event-types/${existingEventType.id}`)
       .set("Authorization", `Bearer ${accessToken}`)
       .send({
-        name: "Updated Services",
-        phoneNumber: "",
-        email: "new@example.com",
+        name: "  Workshop  ",
       });
 
     assert.equal(response.status, 200);
-    assert.equal(response.body.serviceProvider.name, "Updated Services");
-    assert.equal(response.body.serviceProvider.phoneNumber, null);
-    assert.equal(response.body.serviceProvider.email, "new@example.com");
+    assert.equal(response.body.eventType.name, "Workshop");
 
-    const updatedServiceProvider = await prisma.serviceProvider.findUnique({
+    const updatedEventType = await prisma.eventType.findUnique({
       where: {
-        id: existingServiceProvider.id,
+        id: existingEventType.id,
       },
     });
 
-    assert.ok(updatedServiceProvider);
-    assert.equal(updatedServiceProvider.name, "Updated Services");
-    assert.equal(updatedServiceProvider.phoneNumber, null);
-    assert.equal(updatedServiceProvider.email, "new@example.com");
+    assert.ok(updatedEventType);
+    assert.equal(updatedEventType.name, "Workshop");
   });
 
-  it("rejects duplicate names", async () => {
-    const accessToken = await registerAndAuthenticate();
-    await prisma.serviceProvider.create({
+  it("rejects unauthenticated update requests", async () => {
+    const existingEventType = await prisma.eventType.create({
       data: {
-        name: "Acme Services",
+        name: "Conference",
+      },
+    });
+
+    const response = await api.put(`/event-types/${existingEventType.id}`).send({
+      name: "Workshop",
+    });
+
+    assert.equal(response.status, 401);
+    assert.equal(response.body.error, "Invalid or missing access token.");
+  });
+
+  it("rejects duplicate names on create", async () => {
+    const accessToken = await registerAndAuthenticate();
+    await prisma.eventType.create({
+      data: {
+        name: "Conference",
       },
     });
 
     const response = await api
-      .post("/service-providers")
+      .post("/event-types")
       .set("Authorization", `Bearer ${accessToken}`)
       .send({
-        name: "Acme Services",
-        email: "different@example.com",
+        name: "Conference",
       });
 
     assert.equal(response.status, 409);
-    assert.equal(response.body.error, "A service provider with that name already exists.");
+    assert.equal(response.body.error, "An event type with that name already exists.");
   });
 
-  it("rejects duplicate emails", async () => {
+  it("rejects duplicate names on update", async () => {
     const accessToken = await registerAndAuthenticate();
-    await prisma.serviceProvider.create({
+    const originalEventType = await prisma.eventType.create({
       data: {
-        name: "Acme Services",
-        email: "contact@example.com",
+        name: "Conference",
+      },
+    });
+    await prisma.eventType.create({
+      data: {
+        name: "Workshop",
       },
     });
 
     const response = await api
-      .post("/service-providers")
+      .put(`/event-types/${originalEventType.id}`)
       .set("Authorization", `Bearer ${accessToken}`)
       .send({
-        name: "Updated Services",
-        email: "contact@example.com",
+        name: "Workshop",
       });
 
     assert.equal(response.status, 409);
-    assert.equal(response.body.error, "A service provider with that email already exists.");
+    assert.equal(response.body.error, "An event type with that name already exists.");
   });
 
   it("requires name on full replacement updates", async () => {
     const accessToken = await registerAndAuthenticate();
-    const existingServiceProvider = await prisma.serviceProvider.create({
+    const existingEventType = await prisma.eventType.create({
       data: {
-        name: "Acme Services",
+        name: "Conference",
       },
     });
 
     const response = await api
-      .put(`/service-providers/${existingServiceProvider.id}`)
+      .put(`/event-types/${existingEventType.id}`)
       .set("Authorization", `Bearer ${accessToken}`)
-      .send({
-        email: "new@example.com",
-      });
+      .send({});
 
     assert.equal(response.status, 400);
     assert.equal(response.body.error, "name must be a string.");
   });
 
-  it("deletes a service provider by id", async () => {
+  it("returns not found when updating an unknown event type", async () => {
     const accessToken = await registerAndAuthenticate();
-    const existingServiceProvider = await prisma.serviceProvider.create({
+
+    const response = await api
+      .put("/event-types/missing-event-type")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({
+        name: "Conference",
+      });
+
+    assert.equal(response.status, 404);
+    assert.equal(response.body.error, "Event type not found.");
+  });
+
+  it("deletes an event type by id", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const existingEventType = await prisma.eventType.create({
       data: {
-        name: "Acme Services",
+        name: "Conference",
       },
     });
 
     const response = await api
-      .delete(`/service-providers/${existingServiceProvider.id}`)
+      .delete(`/event-types/${existingEventType.id}`)
       .set("Authorization", `Bearer ${accessToken}`);
 
     assert.equal(response.status, 204);
 
-    const serviceProvider = await prisma.serviceProvider.findUnique({
+    const eventType = await prisma.eventType.findUnique({
       where: {
-        id: existingServiceProvider.id,
+        id: existingEventType.id,
       },
     });
 
-    assert.equal(serviceProvider, null);
+    assert.equal(eventType, null);
+  });
+
+  it("rejects unauthenticated delete requests", async () => {
+    const existingEventType = await prisma.eventType.create({
+      data: {
+        name: "Conference",
+      },
+    });
+
+    const response = await api.delete(`/event-types/${existingEventType.id}`);
+
+    assert.equal(response.status, 401);
+    assert.equal(response.body.error, "Invalid or missing access token.");
+  });
+
+  it("returns not found when deleting an unknown event type", async () => {
+    const accessToken = await registerAndAuthenticate();
+
+    const response = await api
+      .delete("/event-types/missing-event-type")
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    assert.equal(response.status, 404);
+    assert.equal(response.body.error, "Event type not found.");
   });
 });

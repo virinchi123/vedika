@@ -1,6 +1,7 @@
 import express from "express";
 
 import { authRouter } from "./auth/auth.router.js";
+import { eventTypeRouter } from "./event-type/event-type.router.js";
 import { HttpError, isHttpError } from "./auth/http-error.js";
 import { serviceProviderRouter } from "./service-provider/service-provider.router.js";
 
@@ -16,6 +17,7 @@ app.get("/health", (_request, response) => {
 });
 
 app.use("/auth", authRouter);
+app.use("/event-types", eventTypeRouter);
 app.use("/service-providers", serviceProviderRouter);
 
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {

@@ -3,6 +3,7 @@ import type {
   ServiceProviderGetPayload,
   ServiceProviderSelect,
 } from "../generated/prisma/models/ServiceProvider.js";
+import { buildCursorPage, type CursorListResult, type CursorPageParams } from "../lib/listing.js";
 import { prisma } from "../lib/prisma.js";
 import { HttpError } from "../auth/http-error.js";
 
@@ -21,9 +22,17 @@ export type ServiceProviderPayload = {
   email: string | null;
 };
 
+export type ServiceProviderListCursor = {
+  createdAt: Date;
+  id: string;
+};
+
 export type ServiceProviderResponse = ServiceProviderGetPayload<{
   select: typeof serviceProviderSelect;
 }>;
+
+export type ListServiceProvidersInput = CursorPageParams<ServiceProviderListCursor>;
+export type ListServiceProvidersResponse = CursorListResult<ServiceProviderResponse>;
 
 const hasUniqueConstraintField = (error: Prisma.PrismaClientKnownRequestError, fieldName: string): boolean => {
   const legacyTarget = error.meta?.target;
@@ -84,6 +93,51 @@ export const createServiceProvider = async (
   } catch (error) {
     throw toServiceProviderConflictError(error) ?? error;
   }
+};
+
+export const listServiceProviders = async ({
+  limit,
+  cursor,
+}: ListServiceProvidersInput): Promise<ListServiceProvidersResponse> => {
+  const serviceProviders = await prisma.serviceProvider.findMany({
+    where:
+      cursor === null
+        ? undefined
+        : {
+            OR: [
+              {
+                createdAt: {
+                  lt: cursor.createdAt,
+                },
+              },
+              {
+                createdAt: cursor.createdAt,
+                id: {
+                  lt: cursor.id,
+                },
+              },
+            ],
+          },
+    orderBy: [
+      {
+        createdAt: "desc",
+      },
+      {
+        id: "desc",
+      },
+    ],
+    take: limit + 1,
+    select: serviceProviderSelect,
+  });
+
+  return buildCursorPage({
+    items: serviceProviders,
+    limit,
+    getCursor: (serviceProvider) => ({
+      createdAt: serviceProvider.createdAt,
+      id: serviceProvider.id,
+    }),
+  });
 };
 
 export const updateServiceProvider = async (

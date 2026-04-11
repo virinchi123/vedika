@@ -5,10 +5,12 @@ import { asyncHandler } from "../lib/async-handler.js";
 import {
   createServiceProvider,
   deleteServiceProvider,
+  listServiceProviders,
   updateServiceProvider,
 } from "./service-provider.service.js";
 import {
   parseCreateServiceProviderInput,
+  parseListServiceProvidersInput,
   parseServiceProviderId,
   parseUpdateServiceProviderInput,
 } from "./service-provider.validation.js";
@@ -16,6 +18,18 @@ import {
 export const serviceProviderRouter = Router();
 
 serviceProviderRouter.use(requireAuth);
+
+serviceProviderRouter.get(
+  "/",
+  asyncHandler(async (request, response) => {
+    const result = await listServiceProviders(parseListServiceProvidersInput(request.query));
+
+    response.status(200).json({
+      serviceProviders: result.items,
+      pageInfo: result.pageInfo,
+    });
+  }),
+);
 
 serviceProviderRouter.post(
   "/",

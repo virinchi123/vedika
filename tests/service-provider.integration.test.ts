@@ -55,6 +55,15 @@ const registerAndAuthenticate = async (): Promise<string> => {
   return registration.body.accessToken as string;
 };
 
+const createServiceProviderRecord = async (name: string, createdAt: string) => {
+  return prisma.serviceProvider.create({
+    data: {
+      name,
+      createdAt: new Date(createdAt),
+    },
+  });
+};
+
 beforeEach(async () => {
   await resetDatabase();
 });
@@ -65,6 +74,95 @@ after(async () => {
 });
 
 describe("service provider routes", () => {
+  it("lists service providers with cursor pagination", async () => {
+    const accessToken = await registerAndAuthenticate();
+    await createServiceProviderRecord("Oldest Services", "2026-04-10T10:00:00.000Z");
+    await createServiceProviderRecord("Middle Services", "2026-04-11T10:00:00.000Z");
+    const newestServiceProvider = await createServiceProviderRecord("Newest Services", "2026-04-12T10:00:00.000Z");
+
+    const response = await api
+      .get("/service-providers")
+      .query({
+        limit: "2",
+      })
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(
+      response.body.serviceProviders.map((serviceProvider: { name: string }) => serviceProvider.name),
+      ["Newest Services", "Middle Services"],
+    );
+    assert.equal(response.body.pageInfo.limit, 2);
+    assert.equal(response.body.pageInfo.hasNextPage, true);
+    assert.ok(typeof response.body.pageInfo.nextCursor === "string");
+    assert.equal(response.body.serviceProviders[0].id, newestServiceProvider.id);
+  });
+
+  it("lists the next page when a cursor is provided", async () => {
+    const accessToken = await registerAndAuthenticate();
+    await createServiceProviderRecord("Oldest Services", "2026-04-10T10:00:00.000Z");
+    await createServiceProviderRecord("Middle Services", "2026-04-11T10:00:00.000Z");
+    await createServiceProviderRecord("Newest Services", "2026-04-12T10:00:00.000Z");
+
+    const firstPageResponse = await api
+      .get("/service-providers")
+      .query({
+        limit: "1",
+      })
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    assert.equal(firstPageResponse.status, 200);
+    assert.ok(typeof firstPageResponse.body.pageInfo.nextCursor === "string");
+
+    const response = await api
+      .get("/service-providers")
+      .query({
+        limit: "1",
+        cursor: firstPageResponse.body.pageInfo.nextCursor,
+      })
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(
+      response.body.serviceProviders.map((serviceProvider: { name: string }) => serviceProvider.name),
+      ["Middle Services"],
+    );
+    assert.equal(response.body.pageInfo.limit, 1);
+    assert.equal(response.body.pageInfo.hasNextPage, true);
+    assert.ok(typeof response.body.pageInfo.nextCursor === "string");
+  });
+
+  it("rejects unauthenticated list requests", async () => {
+    const response = await api.get("/service-providers");
+
+    assert.equal(response.status, 401);
+    assert.equal(response.body.error, "Invalid or missing access token.");
+  });
+
+  it("rejects invalid pagination params", async () => {
+    const accessToken = await registerAndAuthenticate();
+
+    const invalidLimitResponse = await api
+      .get("/service-providers")
+      .query({
+        limit: "0",
+      })
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    assert.equal(invalidLimitResponse.status, 400);
+    assert.equal(invalidLimitResponse.body.error, "limit must be a positive integer.");
+
+    const invalidCursorResponse = await api
+      .get("/service-providers")
+      .query({
+        cursor: "not-a-valid-cursor",
+      })
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    assert.equal(invalidCursorResponse.status, 400);
+    assert.equal(invalidCursorResponse.body.error, "cursor must be a valid cursor.");
+  });
+
   it("creates a service provider for an authenticated request", async () => {
     const accessToken = await registerAndAuthenticate();
 

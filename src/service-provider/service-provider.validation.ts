@@ -1,5 +1,7 @@
 import { normalizeEmailAddress, parseOptionalString } from "../auth/auth.validation.js";
 import { HttpError } from "../auth/http-error.js";
+import { decodeCursor, parseCursorPageParams } from "../lib/listing.js";
+import type { ListServiceProvidersInput, ServiceProviderListCursor } from "./service-provider.service.js";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -27,6 +29,12 @@ const ensureString = (value: unknown, fieldName: string): string => {
 
 export const parseServiceProviderId = (value: unknown): string => {
   return ensureString(value, "serviceProviderId");
+};
+
+export const parseListServiceProvidersInput = (value: unknown): ListServiceProvidersInput => {
+  return parseCursorPageParams(value, {
+    parseCursor: parseServiceProviderListCursor,
+  });
 };
 
 export const parseCreateServiceProviderInput = (value: unknown) => {
@@ -72,4 +80,24 @@ const parseOptionalEmail = (value: unknown): string | null => {
   }
 
   return normalizedEmail;
+};
+
+const parseServiceProviderListCursor = (value: string): ServiceProviderListCursor => {
+  const decodedCursor = decodeCursor<Record<string, unknown>>(value, "cursor");
+  const id = ensureString(decodedCursor.id, "cursor.id");
+
+  if (typeof decodedCursor.createdAt !== "string") {
+    throw new HttpError(400, "cursor must be a valid cursor.");
+  }
+
+  const createdAt = new Date(decodedCursor.createdAt);
+
+  if (Number.isNaN(createdAt.getTime())) {
+    throw new HttpError(400, "cursor must be a valid cursor.");
+  }
+
+  return {
+    createdAt,
+    id,
+  };
 };

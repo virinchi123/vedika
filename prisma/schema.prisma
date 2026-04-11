@@ -32,3 +32,12 @@ model Session {
   @@index([userId])
   @@index([expiresAt])
 }
+
+model ServiceProvider {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  phoneNumber String?
+  email       String?  @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

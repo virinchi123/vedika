@@ -2,12 +2,14 @@ import type {
   EventTypeGetPayload,
   EventTypeSelect,
 } from "../generated/prisma/models/EventType.js";
+import { HttpError } from "../auth/http-error.js";
 import {
   type CreatedAtCursor,
   type CursorListResult,
   type CursorPageParams,
 } from "../lib/listing.js";
 import { createCreatedAtCrudService } from "../lib/crud-service.js";
+import { findUniqueConstraintMessage } from "../lib/prisma-errors.js";
 import { prisma } from "../lib/prisma.js";
 
 const eventTypeSelect = {
@@ -41,7 +43,27 @@ const eventTypeCrud = createCreatedAtCrudService<EventTypePayload, typeof eventT
   uniqueConstraintMessages: eventTypeConflictMessages,
 });
 
-export const createEventType = eventTypeCrud.create;
+export const createEventType = async (data: EventTypePayload): Promise<EventTypeResponse> => {
+  try {
+    return await prisma.eventType.create({
+      data: {
+        ...data,
+        defaultBookingConfiguration: {
+          create: {},
+        },
+      },
+      select: eventTypeSelect,
+    });
+  } catch (error) {
+    const conflictMessage = findUniqueConstraintMessage(error, eventTypeConflictMessages);
+
+    if (conflictMessage !== null) {
+      throw new HttpError(409, conflictMessage);
+    }
+
+    throw error;
+  }
+};
 export const listEventTypes: (input: ListEventTypesInput) => Promise<ListEventTypesResponse> =
   eventTypeCrud.list;
 export const updateEventType = eventTypeCrud.update;

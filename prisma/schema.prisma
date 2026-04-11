@@ -43,10 +43,21 @@ model ServiceProvider {
 }
 
 model EventType {
-  id        String   @id @default(uuid())
-  createdAt DateTime @default(now())
-  name      String   @unique
-  updatedAt DateTime @updatedAt
+  id                          String                       @id @default(uuid())
+  createdAt                   DateTime                     @default(now())
+  name                        String                       @unique
+  updatedAt                   DateTime                     @updatedAt
+  defaultBookingConfiguration DefaultBookingConfiguration?
+}
+
+model DefaultBookingConfiguration {
+  id                       String    @id @default(uuid())
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+  eventTypeId              String    @unique
+  defaultStartTime         DateTime  @default(dbgenerated("TIME '08:00:00'")) @db.Time
+  defaultDurationInMinutes Int       @default(240)
+  eventType                EventType @relation(fields: [eventTypeId], references: [id], onDelete: Cascade)
 }
 
 model EventStatus {

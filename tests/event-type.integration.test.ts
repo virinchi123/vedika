@@ -188,6 +188,19 @@ describe("event type routes", () => {
 
     assert.ok(eventType);
     assert.equal(eventType.name, "Conference");
+
+    const defaultBookingConfiguration = await prisma.defaultBookingConfiguration.findUnique({
+      where: {
+        eventTypeId: response.body.eventType.id,
+      },
+    });
+
+    assert.ok(defaultBookingConfiguration);
+    assert.equal(defaultBookingConfiguration.eventTypeId, response.body.eventType.id);
+    assert.equal(defaultBookingConfiguration.defaultDurationInMinutes, 240);
+    assert.equal(defaultBookingConfiguration.defaultStartTime.getUTCHours(), 8);
+    assert.equal(defaultBookingConfiguration.defaultStartTime.getUTCMinutes(), 0);
+    assert.equal(defaultBookingConfiguration.defaultStartTime.getUTCSeconds(), 0);
   });
 
   it("rejects unauthenticated create requests", async () => {
@@ -321,6 +334,9 @@ describe("event type routes", () => {
     const existingEventType = await prisma.eventType.create({
       data: {
         name: "Conference",
+        defaultBookingConfiguration: {
+          create: {},
+        },
       },
     });
 
@@ -337,6 +353,14 @@ describe("event type routes", () => {
     });
 
     assert.equal(eventType, null);
+
+    const defaultBookingConfiguration = await prisma.defaultBookingConfiguration.findUnique({
+      where: {
+        eventTypeId: existingEventType.id,
+      },
+    });
+
+    assert.equal(defaultBookingConfiguration, null);
   });
 
   it("rejects unauthenticated delete requests", async () => {

@@ -48,3 +48,10 @@ model EventType {
   name      String   @unique
   updatedAt DateTime @updatedAt
 }
+
+model EventStatus {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  name      String   @unique
+  updatedAt DateTime @updatedAt
+}

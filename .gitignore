@@ -1,5 +1,7 @@
 .env
 .idea
+src/config/runtime.ts
+src/generated/prisma
 .yarn/*
 !.yarn/patches
 !.yarn/plugins

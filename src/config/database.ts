@@ -1,13 +1,11 @@
-const encode = (value: string) => encodeURIComponent(value);
+import { runtimeConfig } from "./runtime.js";
 
 export const databaseConfig = {
-  host: "localhost",
-  port: 4444,
-  user: "vedika",
-  password: "event_manager",
-  database: "vedika",
-  schema: "public",
-  get connectionUrl() {
-    return `postgresql://${encode(this.user)}:${encode(this.password)}@${this.host}:${this.port}/${encode(this.database)}?schema=${encode(this.schema)}`;
-  },
-};
+  host: runtimeConfig.database.host,
+  port: runtimeConfig.database.port,
+  user: runtimeConfig.database.user,
+  password: runtimeConfig.database.password,
+  database: runtimeConfig.database.database,
+  schema: runtimeConfig.database.schema,
+  connectionUrl: runtimeConfig.database.connectionUrl,
+} as const;

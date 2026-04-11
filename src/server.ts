@@ -2,7 +2,11 @@ import { app } from "./app.js";
 import { appConfig } from "./config/app.js";
 import { prisma } from "./lib/prisma.js";
 
-const server = app.listen(appConfig.port, () => {
+const server = app.listen(appConfig.port, (error?: Error) => {
+  if (error) {
+    throw error;
+  }
+
   console.log(`Server listening on port ${appConfig.port}`);
 });
 

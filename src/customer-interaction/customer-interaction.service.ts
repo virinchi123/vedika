@@ -5,6 +5,15 @@ import type {
 import { Prisma } from "../generated/prisma/client.js";
 import type { CustomerInteractionType } from "../generated/prisma/enums.js";
 import { HttpError } from "../auth/http-error.js";
+import {
+  buildCreatedAtDescCursorOrderBy,
+  buildCreatedAtDescCursorWhere,
+  buildCursorPage,
+  getCreatedAtCursor,
+  type CreatedAtCursor,
+  type CursorListResult,
+  type CursorPageParams,
+} from "../lib/listing.js";
 import { prisma } from "../lib/prisma.js";
 
 const customerInteractionSelect = {
@@ -39,6 +48,12 @@ export type CustomerInteractionResponse = Omit<
 > & {
   eventBookingIds: string[];
 };
+export type CustomerInteractionListCursor = CreatedAtCursor;
+export type ListCustomerInteractionsInput = CursorPageParams<CustomerInteractionListCursor> & {
+  eventBookingId: string | null;
+  unlinkedOnly: boolean;
+};
+export type ListCustomerInteractionsResponse = CursorListResult<CustomerInteractionResponse>;
 
 const eventBookingNotFoundError = () => new HttpError(404, "Event booking not found.");
 const customerInteractionNotFoundError = () =>
@@ -105,6 +120,79 @@ export const createCustomerInteraction = async (
 
     throw error;
   }
+};
+
+export const getCustomerInteractionById = async (
+  id: string,
+): Promise<CustomerInteractionResponse> => {
+  const customerInteraction = await prisma.customerInteraction.findUnique({
+    where: {
+      id,
+    },
+    select: customerInteractionSelect,
+  });
+
+  if (customerInteraction === null) {
+    throw customerInteractionNotFoundError();
+  }
+
+  return serializeCustomerInteraction(customerInteraction);
+};
+
+export const listCustomerInteractions = async ({
+  limit,
+  cursor,
+  eventBookingId,
+  unlinkedOnly,
+}: ListCustomerInteractionsInput): Promise<ListCustomerInteractionsResponse> => {
+  if (eventBookingId !== null) {
+    await assertEventBookingsExist([eventBookingId]);
+  }
+
+  const whereConditions: Prisma.CustomerInteractionWhereInput[] = [];
+  const cursorWhere = buildCreatedAtDescCursorWhere(cursor);
+
+  if (cursorWhere !== undefined) {
+    whereConditions.push(cursorWhere);
+  }
+
+  if (eventBookingId !== null) {
+    whereConditions.push({
+      eventBookings: {
+        some: {
+          id: eventBookingId,
+        },
+      },
+    });
+  }
+
+  if (unlinkedOnly) {
+    whereConditions.push({
+      eventBookings: {
+        none: {},
+      },
+    });
+  }
+
+  const customerInteractions = await prisma.customerInteraction.findMany({
+    where:
+      whereConditions.length === 0
+        ? undefined
+        : whereConditions.length === 1
+          ? whereConditions[0]
+          : {
+              AND: whereConditions,
+            },
+    orderBy: buildCreatedAtDescCursorOrderBy(),
+    take: limit + 1,
+    select: customerInteractionSelect,
+  });
+
+  return buildCursorPage({
+    items: customerInteractions.map(serializeCustomerInteraction),
+    limit,
+    getCursor: getCreatedAtCursor,
+  });
 };
 
 export const updateCustomerInteraction = async (

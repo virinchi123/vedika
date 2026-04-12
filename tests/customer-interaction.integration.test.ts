@@ -90,9 +90,300 @@ const buildCustomerInteractionPayload = (
   };
 };
 
+const createCustomerInteractionRecord = async ({
+  interactionType = CustomerInteractionType.PHONE_IN,
+  occurredAt = "2026-04-19T11:15:00.000Z",
+  createdAt = "2026-04-19T11:15:00.000Z",
+  eventBookingIds = [],
+}: Partial<{
+  interactionType: CustomerInteractionType;
+  occurredAt: string;
+  createdAt: string;
+  eventBookingIds: string[];
+}> = {}) => {
+  return prisma.customerInteraction.create({
+    data: {
+      interactionType,
+      occurredAt: new Date(occurredAt),
+      createdAt: new Date(createdAt),
+      eventBookings: {
+        connect: eventBookingIds.map((id) => ({ id })),
+      },
+    },
+  });
+};
+
 setupIntegrationTestLifecycle();
 
 describe("customer interaction routes", { skip: !customerInteractionTableExists }, () => {
+  it("gets a customer interaction by id", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const firstReferences = await createEventBookingReferences();
+    const secondReferences = await createEventBookingReferences();
+    const firstEventBooking = await createEventBookingRecord(firstReferences);
+    const secondEventBooking = await createEventBookingRecord(secondReferences);
+    const customerInteraction = await createCustomerInteractionRecord({
+      interactionType: CustomerInteractionType.MISSED_CALL,
+      occurredAt: "2026-04-22T08:00:00.000Z",
+      eventBookingIds: [secondEventBooking.id, firstEventBooking.id],
+    });
+
+    const response = await api
+      .get(`/customer-interactions/${customerInteraction.id}`)
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.customerInteraction.id, customerInteraction.id);
+    assert.equal(
+      response.body.customerInteraction.interactionType,
+      CustomerInteractionType.MISSED_CALL,
+    );
+    assert.equal(
+      response.body.customerInteraction.occurredAt,
+      "2026-04-22T08:00:00.000Z",
+    );
+    assert.deepEqual(response.body.customerInteraction.eventBookingIds, [
+      firstEventBooking.id,
+      secondEventBooking.id,
+    ].sort());
+  });
+
+  it("returns not found when getting an unknown customer interaction", async () => {
+    const accessToken = await registerAndAuthenticate();
+
+    const response = await api
+      .get(`/customer-interactions/${crypto.randomUUID()}`)
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    assert.equal(response.status, 404);
+    assert.equal(response.body.error, "Customer interaction not found.");
+  });
+
+  it("lists customer interactions with cursor pagination", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const oldestCustomerInteraction = await createCustomerInteractionRecord({
+      interactionType: CustomerInteractionType.WALK_IN,
+      createdAt: "2026-04-10T10:00:00.000Z",
+    });
+    await createCustomerInteractionRecord({
+      interactionType: CustomerInteractionType.PHONE_IN,
+      createdAt: "2026-04-11T10:00:00.000Z",
+    });
+    const newestCustomerInteraction = await createCustomerInteractionRecord({
+      interactionType: CustomerInteractionType.MISSED_CALL,
+      createdAt: "2026-04-12T10:00:00.000Z",
+    });
+
+    const response = await api
+      .get("/customer-interactions")
+      .query({
+        limit: "2",
+      })
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(
+      response.body.customerInteractions.map(
+        (customerInteraction: { interactionType: CustomerInteractionType }) =>
+          customerInteraction.interactionType,
+      ),
+      [CustomerInteractionType.MISSED_CALL, CustomerInteractionType.PHONE_IN],
+    );
+    assert.equal(response.body.customerInteractions[0].id, newestCustomerInteraction.id);
+    assert.notEqual(response.body.customerInteractions[0].id, oldestCustomerInteraction.id);
+    assert.equal(response.body.pageInfo.limit, 2);
+    assert.equal(response.body.pageInfo.hasNextPage, true);
+    assert.ok(typeof response.body.pageInfo.nextCursor === "string");
+    assert.deepEqual(response.body.customerInteractions[0].eventBookingIds, []);
+  });
+
+  it("lists the next page when a cursor is provided", async () => {
+    const accessToken = await registerAndAuthenticate();
+    await createCustomerInteractionRecord({
+      interactionType: CustomerInteractionType.WALK_IN,
+      createdAt: "2026-04-10T10:00:00.000Z",
+    });
+    await createCustomerInteractionRecord({
+      interactionType: CustomerInteractionType.PHONE_IN,
+      createdAt: "2026-04-11T10:00:00.000Z",
+    });
+    await createCustomerInteractionRecord({
+      interactionType: CustomerInteractionType.MISSED_CALL,
+      createdAt: "2026-04-12T10:00:00.000Z",
+    });
+
+    const firstPageResponse = await api
+      .get("/customer-interactions")
+      .query({
+        limit: "1",
+      })
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    assert.equal(firstPageResponse.status, 200);
+    assert.ok(typeof firstPageResponse.body.pageInfo.nextCursor === "string");
+
+    const response = await api
+      .get("/customer-interactions")
+      .query({
+        limit: "1",
+        cursor: firstPageResponse.body.pageInfo.nextCursor,
+      })
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(
+      response.body.customerInteractions.map(
+        (customerInteraction: { interactionType: CustomerInteractionType }) =>
+          customerInteraction.interactionType,
+      ),
+      [CustomerInteractionType.PHONE_IN],
+    );
+    assert.equal(response.body.pageInfo.limit, 1);
+    assert.equal(response.body.pageInfo.hasNextPage, true);
+    assert.ok(typeof response.body.pageInfo.nextCursor === "string");
+  });
+
+  it("lists customer interactions filtered by event booking id", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const targetReferences = await createEventBookingReferences();
+    const otherReferences = await createEventBookingReferences();
+    const thirdReferences = await createEventBookingReferences();
+    const targetEventBooking = await createEventBookingRecord(targetReferences);
+    const otherEventBooking = await createEventBookingRecord(otherReferences);
+    const thirdEventBooking = await createEventBookingRecord(thirdReferences);
+    await createCustomerInteractionRecord({
+      interactionType: CustomerInteractionType.WALK_IN,
+      createdAt: "2026-04-10T10:00:00.000Z",
+      eventBookingIds: [otherEventBooking.id],
+    });
+    await createCustomerInteractionRecord({
+      interactionType: CustomerInteractionType.PHONE_IN,
+      createdAt: "2026-04-11T10:00:00.000Z",
+      eventBookingIds: [targetEventBooking.id],
+    });
+    await createCustomerInteractionRecord({
+      interactionType: CustomerInteractionType.MISSED_CALL,
+      createdAt: "2026-04-12T10:00:00.000Z",
+      eventBookingIds: [thirdEventBooking.id, targetEventBooking.id],
+    });
+
+    const response = await api
+      .get("/customer-interactions")
+      .query({
+        eventBookingId: targetEventBooking.id,
+      })
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(
+      response.body.customerInteractions.map(
+        (customerInteraction: { interactionType: CustomerInteractionType }) =>
+          customerInteraction.interactionType,
+      ),
+      [CustomerInteractionType.MISSED_CALL, CustomerInteractionType.PHONE_IN],
+    );
+    assert.deepEqual(response.body.customerInteractions[0].eventBookingIds, [
+      targetEventBooking.id,
+      thirdEventBooking.id,
+    ].sort());
+    assert.deepEqual(response.body.customerInteractions[1].eventBookingIds, [
+      targetEventBooking.id,
+    ]);
+  });
+
+  it("lists only unlinked customer interactions when unlinkedOnly is true", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const references = await createEventBookingReferences();
+    const eventBooking = await createEventBookingRecord(references);
+    await createCustomerInteractionRecord({
+      interactionType: CustomerInteractionType.WALK_IN,
+      createdAt: "2026-04-10T10:00:00.000Z",
+    });
+    await createCustomerInteractionRecord({
+      interactionType: CustomerInteractionType.PHONE_IN,
+      createdAt: "2026-04-11T10:00:00.000Z",
+      eventBookingIds: [eventBooking.id],
+    });
+    await createCustomerInteractionRecord({
+      interactionType: CustomerInteractionType.MISSED_CALL,
+      createdAt: "2026-04-12T10:00:00.000Z",
+    });
+
+    const response = await api
+      .get("/customer-interactions")
+      .query({
+        unlinkedOnly: "true",
+      })
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(
+      response.body.customerInteractions.map(
+        (customerInteraction: { interactionType: CustomerInteractionType }) =>
+          customerInteraction.interactionType,
+      ),
+      [CustomerInteractionType.MISSED_CALL, CustomerInteractionType.WALK_IN],
+    );
+    assert.deepEqual(response.body.customerInteractions[0].eventBookingIds, []);
+    assert.deepEqual(response.body.customerInteractions[1].eventBookingIds, []);
+  });
+
+  it("rejects using eventBookingId and unlinkedOnly together", async () => {
+    const accessToken = await registerAndAuthenticate();
+
+    const response = await api
+      .get("/customer-interactions")
+      .query({
+        eventBookingId: crypto.randomUUID(),
+        unlinkedOnly: "true",
+      })
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    assert.equal(response.status, 400);
+    assert.equal(
+      response.body.error,
+      "eventBookingId and unlinkedOnly cannot be used together.",
+    );
+  });
+
+  it("rejects an invalid unlinkedOnly value", async () => {
+    const accessToken = await registerAndAuthenticate();
+
+    const response = await api
+      .get("/customer-interactions")
+      .query({
+        unlinkedOnly: "maybe",
+      })
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.error, "unlinkedOnly must be a boolean.");
+  });
+
+  it("returns not found when listing with an unknown event booking id", async () => {
+    const accessToken = await registerAndAuthenticate();
+
+    const response = await api
+      .get("/customer-interactions")
+      .query({
+        eventBookingId: crypto.randomUUID(),
+      })
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    assert.equal(response.status, 404);
+    assert.equal(response.body.error, "Event booking not found.");
+  });
+
+  it("rejects unauthenticated get by id and list requests", async () => {
+    const unauthenticatedGetResponse = await api.get(
+      `/customer-interactions/${crypto.randomUUID()}`,
+    );
+    assert.equal(unauthenticatedGetResponse.status, 401);
+
+    const unauthenticatedListResponse = await api.get("/customer-interactions");
+    assert.equal(unauthenticatedListResponse.status, 401);
+  });
+
   it("creates a customer interaction without event bookings", async () => {
     const accessToken = await registerAndAuthenticate();
 

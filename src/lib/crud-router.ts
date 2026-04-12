@@ -16,6 +16,12 @@ type CrudCreateOperation<TEntity, TCreateInput> = {
   handler: (input: TCreateInput) => Promise<TEntity>;
 };
 
+type CrudGetOperation<TEntity> = {
+  responseKey: string;
+  parseId: (value: unknown) => string;
+  handler: (id: string) => Promise<TEntity>;
+};
+
 type CrudUpdateOperation<TEntity, TUpdateInput> = {
   responseKey: string;
   parseId: (value: unknown) => string;
@@ -31,6 +37,7 @@ type CrudDeleteOperation = {
 type CreateCrudRouterOptions<TEntity, TCreateInput, TUpdateInput, TListInput> = {
   requireAuthentication?: boolean;
   list?: CrudListOperation<TEntity, TListInput>;
+  getById?: CrudGetOperation<TEntity>;
   create?: CrudCreateOperation<TEntity, TCreateInput>;
   update?: CrudUpdateOperation<TEntity, TUpdateInput>;
   delete?: CrudDeleteOperation;
@@ -39,6 +46,7 @@ type CreateCrudRouterOptions<TEntity, TCreateInput, TUpdateInput, TListInput> = 
 export const createCrudRouter = <TEntity, TCreateInput, TUpdateInput, TListInput>({
   requireAuthentication = true,
   list,
+  getById,
   create,
   update,
   delete: deleteOperation,
@@ -58,6 +66,19 @@ export const createCrudRouter = <TEntity, TCreateInput, TUpdateInput, TListInput
         response.status(200).json({
           [list.responseKey]: result.items,
           pageInfo: result.pageInfo,
+        });
+      }),
+    );
+  }
+
+  if (getById) {
+    router.get(
+      "/:id",
+      asyncHandler(async (request, response) => {
+        const record = await getById.handler(getById.parseId(request.params.id));
+
+        response.status(200).json({
+          [getById.responseKey]: record,
         });
       }),
     );

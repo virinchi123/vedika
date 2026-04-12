@@ -1,8 +1,13 @@
 import { parseOptionalString } from "../auth/auth.validation.js";
 import { HttpError } from "../auth/http-error.js";
 import { CustomerInteractionType } from "../generated/prisma/enums.js";
-import { createCrudValidators } from "../lib/crud-validation.js";
-import type { CustomerInteractionPayload } from "./customer-interaction.service.js";
+import { createCrudValidators, ensureObject } from "../lib/crud-validation.js";
+import { parseCreatedAtCursor, parseCursorPageParams } from "../lib/listing.js";
+import type {
+  CustomerInteractionListCursor,
+  CustomerInteractionPayload,
+  ListCustomerInteractionsInput,
+} from "./customer-interaction.service.js";
 
 const parseRequiredDateTime = (value: unknown, fieldName: string): Date => {
   if (typeof value !== "string") {
@@ -84,11 +89,75 @@ const parseEventBookingIds = (value: unknown): string[] => {
   ];
 };
 
-const customerInteractionValidators = createCrudValidators<CustomerInteractionPayload, string>({
+const parseCustomerInteractionListCursor = (
+  value: string,
+): CustomerInteractionListCursor => {
+  return parseCreatedAtCursor(value);
+};
+
+const parseOptionalBooleanQueryParam = (
+  value: unknown,
+  fieldName: string,
+): boolean => {
+  if (value === undefined || value === null) {
+    return false;
+  }
+
+  if (Array.isArray(value) || typeof value !== "string") {
+    throw new HttpError(400, `${fieldName} must be a boolean.`);
+  }
+
+  const normalizedValue = value.trim().toLowerCase();
+
+  if (normalizedValue === "true") {
+    return true;
+  }
+
+  if (normalizedValue === "false" || normalizedValue === "") {
+    return false;
+  }
+
+  throw new HttpError(400, `${fieldName} must be a boolean.`);
+};
+
+const customerInteractionValidators = createCrudValidators<
+  CustomerInteractionPayload,
+  CustomerInteractionListCursor
+>({
   idFieldName: "customerInteractionId",
-  parseCursor: (value) => value,
+  parseCursor: parseCustomerInteractionListCursor,
   parseCreateBody: parseCustomerInteractionPayload,
 });
+
+export const parseListCustomerInteractionsInput = (
+  value: unknown,
+): ListCustomerInteractionsInput => {
+  const query = ensureObject(value, "query");
+  const pageParams = parseCursorPageParams(value, {
+    parseCursor: parseCustomerInteractionListCursor,
+  });
+
+  const eventBookingId = parseOptionalString(query.eventBookingId, {
+    fieldName: "eventBookingId",
+  });
+  const unlinkedOnly = parseOptionalBooleanQueryParam(
+    query.unlinkedOnly,
+    "unlinkedOnly",
+  );
+
+  if (eventBookingId !== null && unlinkedOnly) {
+    throw new HttpError(
+      400,
+      "eventBookingId and unlinkedOnly cannot be used together.",
+    );
+  }
+
+  return {
+    ...pageParams,
+    eventBookingId,
+    unlinkedOnly,
+  };
+};
 
 export const parseCustomerInteractionId = customerInteractionValidators.parseId;
 export const parseCreateCustomerInteractionInput =

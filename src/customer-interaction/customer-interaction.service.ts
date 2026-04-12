@@ -13,7 +13,14 @@ const customerInteractionSelect = {
   updatedAt: true,
   interactionType: true,
   occurredAt: true,
-  eventBookingId: true,
+  eventBookings: {
+    select: {
+      id: true,
+    },
+    orderBy: {
+      id: "asc",
+    },
+  },
 } satisfies CustomerInteractionSelect;
 
 type CustomerInteractionRecord = CustomerInteractionGetPayload<{
@@ -23,10 +30,15 @@ type CustomerInteractionRecord = CustomerInteractionGetPayload<{
 export type CustomerInteractionPayload = {
   interactionType: CustomerInteractionType;
   occurredAt: Date;
-  eventBookingId: string | null;
+  eventBookingIds: string[];
 };
 
-export type CustomerInteractionResponse = CustomerInteractionRecord;
+export type CustomerInteractionResponse = Omit<
+  CustomerInteractionRecord,
+  "eventBookings"
+> & {
+  eventBookingIds: string[];
+};
 
 const eventBookingNotFoundError = () => new HttpError(404, "Event booking not found.");
 const customerInteractionNotFoundError = () =>
@@ -36,21 +48,34 @@ const isForeignKeyError = (error: unknown): boolean => {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003";
 };
 
-const assertEventBookingExists = async (eventBookingId: string | null): Promise<void> => {
-  if (eventBookingId === null) {
+const serializeCustomerInteraction = (
+  customerInteraction: CustomerInteractionRecord,
+): CustomerInteractionResponse => {
+  const { eventBookings, ...customerInteractionData } = customerInteraction;
+
+  return {
+    ...customerInteractionData,
+    eventBookingIds: eventBookings.map((eventBooking) => eventBooking.id),
+  };
+};
+
+const assertEventBookingsExist = async (eventBookingIds: string[]): Promise<void> => {
+  if (eventBookingIds.length === 0) {
     return;
   }
 
-  const eventBooking = await prisma.eventBooking.findUnique({
+  const eventBookings = await prisma.eventBooking.findMany({
     where: {
-      id: eventBookingId,
+      id: {
+        in: eventBookingIds,
+      },
     },
     select: {
       id: true,
     },
   });
 
-  if (eventBooking === null) {
+  if (eventBookings.length !== eventBookingIds.length) {
     throw eventBookingNotFoundError();
   }
 };
@@ -58,13 +83,21 @@ const assertEventBookingExists = async (eventBookingId: string | null): Promise<
 export const createCustomerInteraction = async (
   data: CustomerInteractionPayload,
 ): Promise<CustomerInteractionResponse> => {
-  await assertEventBookingExists(data.eventBookingId);
+  await assertEventBookingsExist(data.eventBookingIds);
+  const { eventBookingIds, ...customerInteractionData } = data;
 
   try {
-    return await prisma.customerInteraction.create({
-      data,
+    const customerInteraction = await prisma.customerInteraction.create({
+      data: {
+        ...customerInteractionData,
+        eventBookings: {
+          connect: eventBookingIds.map((id) => ({ id })),
+        },
+      },
       select: customerInteractionSelect,
     });
+
+    return serializeCustomerInteraction(customerInteraction);
   } catch (error) {
     if (isForeignKeyError(error)) {
       throw eventBookingNotFoundError();
@@ -91,16 +124,24 @@ export const updateCustomerInteraction = async (
     throw customerInteractionNotFoundError();
   }
 
-  await assertEventBookingExists(data.eventBookingId);
+  await assertEventBookingsExist(data.eventBookingIds);
+  const { eventBookingIds, ...customerInteractionData } = data;
 
   try {
-    return await prisma.customerInteraction.update({
+    const customerInteraction = await prisma.customerInteraction.update({
       where: {
         id,
       },
-      data,
+      data: {
+        ...customerInteractionData,
+        eventBookings: {
+          set: eventBookingIds.map((eventBookingId) => ({ id: eventBookingId })),
+        },
+      },
       select: customerInteractionSelect,
     });
+
+    return serializeCustomerInteraction(customerInteraction);
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&

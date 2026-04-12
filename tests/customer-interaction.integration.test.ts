@@ -76,7 +76,7 @@ const createEventBookingRecord = async (
 type CustomerInteractionPayloadOverrides = Partial<{
   interactionType: CustomerInteractionType | string;
   occurredAt: string;
-  eventBookingId: string | null;
+  eventBookingIds: string[];
 }>;
 
 const buildCustomerInteractionPayload = (
@@ -85,7 +85,7 @@ const buildCustomerInteractionPayload = (
   return {
     interactionType: CustomerInteractionType.PHONE_IN,
     occurredAt: "2026-04-19T11:15:00.000Z",
-    eventBookingId: undefined,
+    eventBookingIds: undefined,
     ...overrides,
   };
 };
@@ -93,7 +93,7 @@ const buildCustomerInteractionPayload = (
 setupIntegrationTestLifecycle();
 
 describe("customer interaction routes", { skip: !customerInteractionTableExists }, () => {
-  it("creates a customer interaction without an event booking", async () => {
+  it("creates a customer interaction without event bookings", async () => {
     const accessToken = await registerAndAuthenticate();
 
     const response = await api
@@ -110,19 +110,69 @@ describe("customer interaction routes", { skip: !customerInteractionTableExists 
       response.body.customerInteraction.occurredAt,
       "2026-04-19T11:15:00.000Z",
     );
-    assert.equal(response.body.customerInteraction.eventBookingId, null);
+    assert.deepEqual(response.body.customerInteraction.eventBookingIds, []);
 
     const storedCustomerInteraction = await prisma.customerInteraction.findUnique({
       where: {
         id: response.body.customerInteraction.id,
       },
+      select: {
+        eventBookings: {
+          select: {
+            id: true,
+          },
+          orderBy: {
+            id: "asc",
+          },
+        },
+      },
     });
 
     assert.ok(storedCustomerInteraction);
-    assert.equal(storedCustomerInteraction.eventBookingId, null);
+    assert.deepEqual(storedCustomerInteraction.eventBookings, []);
   });
 
-  it("creates a customer interaction with a valid event booking id", async () => {
+  it("creates a customer interaction with valid event booking ids", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const firstReferences = await createEventBookingReferences();
+    const secondReferences = await createEventBookingReferences();
+    const firstEventBooking = await createEventBookingRecord(firstReferences);
+    const secondEventBooking = await createEventBookingRecord(secondReferences);
+
+    const response = await api
+      .post("/customer-interactions")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send(
+        buildCustomerInteractionPayload({
+          interactionType: CustomerInteractionType.WALK_IN,
+          eventBookingIds: [secondEventBooking.id, firstEventBooking.id],
+        }),
+      );
+
+    assert.equal(response.status, 201);
+    assert.equal(
+      response.body.customerInteraction.interactionType,
+      CustomerInteractionType.WALK_IN,
+    );
+    assert.deepEqual(response.body.customerInteraction.eventBookingIds, [
+      firstEventBooking.id,
+      secondEventBooking.id,
+    ].sort());
+  });
+
+  it("creates a customer interaction with no event bookings when eventBookingIds is omitted", async () => {
+    const accessToken = await registerAndAuthenticate();
+
+    const response = await api
+      .post("/customer-interactions")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send(buildCustomerInteractionPayload());
+
+    assert.equal(response.status, 201);
+    assert.deepEqual(response.body.customerInteraction.eventBookingIds, []);
+  });
+
+  it("deduplicates event booking ids on create", async () => {
     const accessToken = await registerAndAuthenticate();
     const references = await createEventBookingReferences();
     const eventBooking = await createEventBookingRecord(references);
@@ -132,33 +182,12 @@ describe("customer interaction routes", { skip: !customerInteractionTableExists 
       .set("Authorization", `Bearer ${accessToken}`)
       .send(
         buildCustomerInteractionPayload({
-          interactionType: CustomerInteractionType.WALK_IN,
-          eventBookingId: eventBooking.id,
+          eventBookingIds: [eventBooking.id, eventBooking.id, `  ${eventBooking.id}  `],
         }),
       );
 
     assert.equal(response.status, 201);
-    assert.equal(response.body.customerInteraction.eventBookingId, eventBooking.id);
-    assert.equal(
-      response.body.customerInteraction.interactionType,
-      CustomerInteractionType.WALK_IN,
-    );
-  });
-
-  it("normalizes a blank event booking id to null on create", async () => {
-    const accessToken = await registerAndAuthenticate();
-
-    const response = await api
-      .post("/customer-interactions")
-      .set("Authorization", `Bearer ${accessToken}`)
-      .send(
-        buildCustomerInteractionPayload({
-          eventBookingId: "   ",
-        }),
-      );
-
-    assert.equal(response.status, 201);
-    assert.equal(response.body.customerInteraction.eventBookingId, null);
+    assert.deepEqual(response.body.customerInteraction.eventBookingIds, [eventBooking.id]);
   });
 
   it("rejects an invalid interaction type", async () => {
@@ -207,12 +236,27 @@ describe("customer interaction routes", { skip: !customerInteractionTableExists 
       .set("Authorization", `Bearer ${accessToken}`)
       .send(
         buildCustomerInteractionPayload({
-          eventBookingId: crypto.randomUUID(),
+          eventBookingIds: [crypto.randomUUID()],
         }),
       );
 
     assert.equal(response.status, 404);
     assert.equal(response.body.error, "Event booking not found.");
+  });
+
+  it("rejects a non-array eventBookingIds value", async () => {
+    const accessToken = await registerAndAuthenticate();
+
+    const response = await api
+      .post("/customer-interactions")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({
+        ...buildCustomerInteractionPayload(),
+        eventBookingIds: "not-an-array",
+      });
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.error, "eventBookingIds must be an array.");
   });
 
   it("requires authentication for create, update, and delete", async () => {
@@ -232,7 +276,7 @@ describe("customer interaction routes", { skip: !customerInteractionTableExists 
     assert.equal(unauthenticatedDelete.status, 401);
   });
 
-  it("updates a customer interaction and changes the event booking link", async () => {
+  it("updates a customer interaction and changes the event booking links", async () => {
     const accessToken = await registerAndAuthenticate();
     const firstReferences = await createEventBookingReferences();
     const secondReferences = await createEventBookingReferences();
@@ -242,7 +286,9 @@ describe("customer interaction routes", { skip: !customerInteractionTableExists 
       data: {
         interactionType: CustomerInteractionType.PHONE_IN,
         occurredAt: new Date("2026-04-19T11:15:00.000Z"),
-        eventBookingId: originalEventBooking.id,
+        eventBookings: {
+          connect: [{ id: originalEventBooking.id }],
+        },
       },
     });
 
@@ -253,7 +299,7 @@ describe("customer interaction routes", { skip: !customerInteractionTableExists 
         buildCustomerInteractionPayload({
           interactionType: CustomerInteractionType.MISSED_CALL,
           occurredAt: "2026-04-21T09:00:00.000Z",
-          eventBookingId: replacementEventBooking.id,
+          eventBookingIds: [replacementEventBooking.id],
         }),
       );
 
@@ -266,13 +312,12 @@ describe("customer interaction routes", { skip: !customerInteractionTableExists 
       response.body.customerInteraction.occurredAt,
       "2026-04-21T09:00:00.000Z",
     );
-    assert.equal(
-      response.body.customerInteraction.eventBookingId,
+    assert.deepEqual(response.body.customerInteraction.eventBookingIds, [
       replacementEventBooking.id,
-    );
+    ]);
   });
 
-  it("clears event booking id on update when null is provided", async () => {
+  it("clears event booking ids on update when an empty array is provided", async () => {
     const accessToken = await registerAndAuthenticate();
     const references = await createEventBookingReferences();
     const eventBooking = await createEventBookingRecord(references);
@@ -280,7 +325,9 @@ describe("customer interaction routes", { skip: !customerInteractionTableExists 
       data: {
         interactionType: CustomerInteractionType.WALK_IN,
         occurredAt: new Date("2026-04-19T11:15:00.000Z"),
-        eventBookingId: eventBooking.id,
+        eventBookings: {
+          connect: [{ id: eventBooking.id }],
+        },
       },
     });
 
@@ -291,39 +338,12 @@ describe("customer interaction routes", { skip: !customerInteractionTableExists 
         buildCustomerInteractionPayload({
           interactionType: CustomerInteractionType.WALK_IN,
           occurredAt: "2026-04-20T08:45:00.000Z",
-          eventBookingId: null,
+          eventBookingIds: [],
         }),
       );
 
     assert.equal(response.status, 200);
-    assert.equal(response.body.customerInteraction.eventBookingId, null);
-  });
-
-  it("clears event booking id on update when a blank string is provided", async () => {
-    const accessToken = await registerAndAuthenticate();
-    const references = await createEventBookingReferences();
-    const eventBooking = await createEventBookingRecord(references);
-    const existingCustomerInteraction = await prisma.customerInteraction.create({
-      data: {
-        interactionType: CustomerInteractionType.WALK_IN,
-        occurredAt: new Date("2026-04-19T11:15:00.000Z"),
-        eventBookingId: eventBooking.id,
-      },
-    });
-
-    const response = await api
-      .put(`/customer-interactions/${existingCustomerInteraction.id}`)
-      .set("Authorization", `Bearer ${accessToken}`)
-      .send(
-        buildCustomerInteractionPayload({
-          interactionType: CustomerInteractionType.PHONE_IN,
-          occurredAt: "2026-04-20T10:30:00.000Z",
-          eventBookingId: "   ",
-        }),
-      );
-
-    assert.equal(response.status, 200);
-    assert.equal(response.body.customerInteraction.eventBookingId, null);
+    assert.deepEqual(response.body.customerInteraction.eventBookingIds, []);
   });
 
   it("returns not found when updating an unknown customer interaction", async () => {
@@ -344,7 +364,6 @@ describe("customer interaction routes", { skip: !customerInteractionTableExists 
       data: {
         interactionType: CustomerInteractionType.PHONE_IN,
         occurredAt: new Date("2026-04-19T11:15:00.000Z"),
-        eventBookingId: null,
       },
     });
 
@@ -353,7 +372,7 @@ describe("customer interaction routes", { skip: !customerInteractionTableExists 
       .set("Authorization", `Bearer ${accessToken}`)
       .send(
         buildCustomerInteractionPayload({
-          eventBookingId: crypto.randomUUID(),
+          eventBookingIds: [crypto.randomUUID()],
         }),
       );
 
@@ -367,7 +386,6 @@ describe("customer interaction routes", { skip: !customerInteractionTableExists 
       data: {
         interactionType: CustomerInteractionType.MISSED_CALL,
         occurredAt: new Date("2026-04-19T11:15:00.000Z"),
-        eventBookingId: null,
       },
     });
 

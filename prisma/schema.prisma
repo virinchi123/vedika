@@ -118,8 +118,5 @@ model CustomerInteraction {
   updatedAt       DateTime                @updatedAt
   interactionType CustomerInteractionType
   occurredAt      DateTime
-  eventBookingId  String?
-  eventBooking    EventBooking?           @relation(fields: [eventBookingId], references: [id], onDelete: SetNull)
-
-  @@index([eventBookingId])
+  eventBookings   EventBooking[]
 }

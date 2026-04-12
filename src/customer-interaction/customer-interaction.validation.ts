@@ -54,10 +54,34 @@ const parseCustomerInteractionPayload = (
   return {
     interactionType: parseInteractionType(payload.interactionType),
     occurredAt: parseRequiredDateTime(payload.occurredAt, "occurredAt"),
-    eventBookingId: parseOptionalString(payload.eventBookingId, {
-      fieldName: "eventBookingId",
-    }),
+    eventBookingIds: parseEventBookingIds(payload.eventBookingIds),
   };
+};
+
+const parseEventBookingIds = (value: unknown): string[] => {
+  if (value === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    throw new HttpError(400, "eventBookingIds must be an array.");
+  }
+
+  return [
+    ...new Set(
+      value.map((item, index) => {
+        const eventBookingId = parseOptionalString(item, {
+          fieldName: `eventBookingIds[${index}]`,
+        });
+
+        if (eventBookingId === null) {
+          throw new HttpError(400, `eventBookingIds[${index}] is required.`);
+        }
+
+        return eventBookingId;
+      }),
+    ),
+  ];
 };
 
 const customerInteractionValidators = createCrudValidators<CustomerInteractionPayload, string>({

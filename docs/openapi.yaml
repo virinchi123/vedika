@@ -514,6 +514,59 @@ paths:
         '409':
           $ref: '#/components/responses/ConflictResponse'
 
+  /services/{id}:
+    get:
+      tags: [Services]
+      operationId: getServiceById
+      summary: Get service by id
+      description: Returns a single service record by id.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Service fetched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceEnvelope'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+    patch:
+      tags: [Services]
+      operationId: updateService
+      summary: Update service amounts
+      description: |
+        Updates one or both editable amount fields on a service.
+
+        Only `contractedAmount` and `commissionAmount` are accepted. Omitted fields are left unchanged.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServicePatchRequest'
+      responses:
+        '200':
+          description: Service updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+
   /default-booking-configurations:
     get:
       tags: [Default Booking Configurations]
@@ -1367,6 +1420,62 @@ components:
             $ref: '#/components/schemas/ServiceProvider'
         pageInfo:
           $ref: '#/components/schemas/PageInfo'
+
+    ServicePatchRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        contractedAmount:
+          type: string
+          nullable: true
+          pattern: '^-?\d+(\.\d{1,2})?$'
+          description: Decimal string with up to 2 fractional digits, or null.
+        commissionAmount:
+          type: string
+          nullable: true
+          pattern: '^-?\d+(\.\d{1,2})?$'
+          description: Decimal string with up to 2 fractional digits, or null.
+
+    Service:
+      type: object
+      required:
+        [
+          id,
+          createdAt,
+          updatedAt,
+          serviceProviderId,
+          eventBookingId,
+          contractedAmount,
+          commissionAmount
+        ]
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        serviceProviderId:
+          type: string
+        eventBookingId:
+          type: string
+        contractedAmount:
+          type: string
+          nullable: true
+          pattern: '^-?\d+(\.\d{2})$'
+        commissionAmount:
+          type: string
+          nullable: true
+          pattern: '^-?\d+(\.\d{2})$'
+
+    ServiceEnvelope:
+      type: object
+      required: [service]
+      properties:
+        service:
+          $ref: '#/components/schemas/Service'
 
     DefaultBookingConfigurationRequest:
       type: object

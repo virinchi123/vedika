@@ -1,7 +1,9 @@
 import { createCrudRouter } from "../lib/crud-router.js";
+import { asyncHandler } from "../lib/async-handler.js";
 import {
   createEventBooking,
   deleteEventBooking,
+  getEventBookingById,
   listEventBookings,
   updateEventBooking,
 } from "./event-booking.service.js";
@@ -34,3 +36,16 @@ export const eventBookingRouter = createCrudRouter({
     handler: deleteEventBooking,
   },
 });
+
+eventBookingRouter.get(
+  "/:id",
+  asyncHandler(async (request, response) => {
+    const eventBooking = await getEventBookingById(
+      parseEventBookingId(request.params.id),
+    );
+
+    response.status(200).json({
+      eventBooking,
+    });
+  }),
+);

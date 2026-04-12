@@ -222,6 +222,70 @@ describe("event booking routes", { skip: !eventBookingTableExists }, () => {
     assert.equal(response.body.error, "Invalid or missing access token.");
   });
 
+  it("gets an event booking with discoverable service ids", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const references = await createReferences();
+    const providerOne = await createServiceProviderRecord(`Provider ${crypto.randomUUID()}`);
+    const providerTwo = await createServiceProviderRecord(`Provider ${crypto.randomUUID()}`);
+    const eventBooking = await createEventBookingRecord(references, {
+      serviceProviders: {
+        connect: [{ id: providerOne.id }, { id: providerTwo.id }],
+      },
+    });
+    const firstService = await prisma.service.create({
+      data: {
+        serviceProviderId: providerOne.id,
+        eventBookingId: eventBooking.id,
+        contractedAmount: new Prisma.Decimal("12000.00"),
+        commissionAmount: new Prisma.Decimal("1200.00"),
+      },
+    });
+    const secondService = await prisma.service.create({
+      data: {
+        serviceProviderId: providerTwo.id,
+        eventBookingId: eventBooking.id,
+        contractedAmount: null,
+        commissionAmount: null,
+      },
+    });
+
+    const response = await api
+      .get(`/event-bookings/${eventBooking.id}`)
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.eventBooking.id, eventBooking.id);
+    assert.deepEqual(response.body.eventBooking.serviceProviderIds, [
+      providerOne.id,
+      providerTwo.id,
+    ].sort());
+    assert.deepEqual(response.body.eventBooking.services, [
+      {
+        id: firstService.id,
+        serviceProviderId: providerOne.id,
+        contractedAmount: "12000.00",
+        commissionAmount: "1200.00",
+      },
+      {
+        id: secondService.id,
+        serviceProviderId: providerTwo.id,
+        contractedAmount: null,
+        commissionAmount: null,
+      },
+    ].sort((left, right) => left.serviceProviderId.localeCompare(right.serviceProviderId)));
+  });
+
+  it("returns not found when getting an unknown event booking", async () => {
+    const accessToken = await registerAndAuthenticate();
+
+    const response = await api
+      .get(`/event-bookings/${crypto.randomUUID()}`)
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    assert.equal(response.status, 404);
+    assert.equal(response.body.error, "Event booking not found.");
+  });
+
   it("filters event bookings by case-insensitive customer name substring", async () => {
     const accessToken = await registerAndAuthenticate();
     const references = await createReferences();
@@ -963,7 +1027,7 @@ describe("event booking routes", { skip: !eventBookingTableExists }, () => {
     assert.equal(storedServices[0]?.commissionAmount?.toString(), "1200");
   });
 
-  it("clears providers on update when serviceProviderIds is omitted", async () => {
+  it("requires serviceProviderIds on update", async () => {
     const accessToken = await registerAndAuthenticate();
     const references = await createReferences();
     const provider = await createServiceProviderRecord(`Provider ${crypto.randomUUID()}`);
@@ -987,7 +1051,8 @@ describe("event booking routes", { skip: !eventBookingTableExists }, () => {
       .set("Authorization", `Bearer ${accessToken}`)
       .send(payload);
 
-    assert.equal(response.status, 200);
+    assert.equal(response.status, 400);
+    assert.equal(response.body.error, "serviceProviderIds is required.");
 
     const storedEventBooking = await prisma.eventBooking.findUnique({
       where: {
@@ -1002,11 +1067,12 @@ describe("event booking routes", { skip: !eventBookingTableExists }, () => {
       },
     });
 
-    assert.deepEqual(storedEventBooking?.serviceProviders, []);
+    assert.deepEqual(storedEventBooking?.serviceProviders.map((item) => item.id), [provider.id]);
 
     const storedServices = await listServicesForEventBooking(existingEventBooking.id);
 
-    assert.deepEqual(storedServices, []);
+    assert.equal(storedServices.length, 1);
+    assert.equal(storedServices[0]?.serviceProviderId, provider.id);
   });
 
   it("rejects unauthenticated update requests", async () => {

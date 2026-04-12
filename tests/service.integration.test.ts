@@ -109,6 +109,37 @@ describe("service model", { skip: !serviceTableExists }, () => {
     assert.equal(service.commissionAmount, null);
   });
 
+  it("rejects a negative contracted amount", async () => {
+    const { serviceProvider, eventBooking } = await createReferences();
+
+    await assert.rejects(
+      prisma.service.create({
+        data: {
+          serviceProviderId: serviceProvider.id,
+          eventBookingId: eventBooking.id,
+          contractedAmount: new Prisma.Decimal("-1.00"),
+        },
+      }),
+      isServiceAmountCheckConstraintError,
+    );
+  });
+
+  it("rejects a negative commission amount", async () => {
+    const { serviceProvider, eventBooking } = await createReferences();
+
+    await assert.rejects(
+      prisma.service.create({
+        data: {
+          serviceProviderId: serviceProvider.id,
+          eventBookingId: eventBooking.id,
+          contractedAmount: new Prisma.Decimal("100.00"),
+          commissionAmount: new Prisma.Decimal("-1.00"),
+        },
+      }),
+      isServiceAmountCheckConstraintError,
+    );
+  });
+
   it("rejects a commission amount when contracted amount is null", async () => {
     const { serviceProvider, eventBooking } = await createReferences();
 

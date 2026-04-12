@@ -38,6 +38,33 @@ type EventBookingRecord = EventBookingGetPayload<{
   select: typeof eventBookingSelect;
 }>;
 
+const eventBookingDetailSelect = {
+  ...eventBookingSelect,
+  serviceProviders: {
+    select: {
+      id: true,
+    },
+    orderBy: {
+      id: "asc",
+    },
+  },
+  services: {
+    select: {
+      id: true,
+      serviceProviderId: true,
+      contractedAmount: true,
+      commissionAmount: true,
+    },
+    orderBy: {
+      serviceProviderId: "asc",
+    },
+  },
+} satisfies EventBookingSelect;
+
+type EventBookingDetailRecord = EventBookingGetPayload<{
+  select: typeof eventBookingDetailSelect;
+}>;
+
 export type EventBookingPayload = {
   mode: EventBookingMode;
   bookingStatusId: string;
@@ -55,6 +82,18 @@ export type EventBookingPayload = {
 };
 
 export type EventBookingResponse = EventBookingRecord;
+export type EventBookingDetailResponse = Omit<
+  EventBookingDetailRecord,
+  "serviceProviders" | "services"
+> & {
+  serviceProviderIds: string[];
+  services: Array<{
+    id: string;
+    serviceProviderId: string;
+    contractedAmount: string | null;
+    commissionAmount: string | null;
+  }>;
+};
 export type EventBookingListCursor = CreatedAtCursor;
 export type ListEventBookingsInput = CursorPageParams<EventBookingListCursor> & {
   name: string | null;
@@ -68,6 +107,28 @@ const bookingStatusNotFoundError = () => new HttpError(404, "Booking status not 
 const eventStatusNotFoundError = () => new HttpError(404, "Event status not found.");
 const eventTypeNotFoundError = () => new HttpError(404, "Event type not found.");
 const serviceProviderNotFoundError = () => new HttpError(404, "Service provider not found.");
+const eventBookingNotFoundError = () => new HttpError(404, "Event booking not found.");
+
+const serializeDecimal = (value: Prisma.Decimal | null): string | null => {
+  return value === null ? null : value.toFixed(2);
+};
+
+const serializeEventBookingDetail = (
+  eventBooking: EventBookingDetailRecord,
+): EventBookingDetailResponse => {
+  const { serviceProviders, services, ...eventBookingData } = eventBooking;
+
+  return {
+    ...eventBookingData,
+    serviceProviderIds: serviceProviders.map((serviceProvider) => serviceProvider.id),
+    services: services.map((service) => ({
+      id: service.id,
+      serviceProviderId: service.serviceProviderId,
+      contractedAmount: serializeDecimal(service.contractedAmount),
+      commissionAmount: serializeDecimal(service.commissionAmount),
+    })),
+  };
+};
 
 const assertBookingStatusExists = async (bookingStatusId: string): Promise<void> => {
   const bookingStatus = await prisma.bookingStatus.findUnique({
@@ -348,6 +409,23 @@ export const listEventBookings = async ({
   });
 };
 
+export const getEventBookingById = async (
+  id: string,
+): Promise<EventBookingDetailResponse> => {
+  const eventBooking = await prisma.eventBooking.findUnique({
+    where: {
+      id,
+    },
+    select: eventBookingDetailSelect,
+  });
+
+  if (eventBooking === null) {
+    throw eventBookingNotFoundError();
+  }
+
+  return serializeEventBookingDetail(eventBooking);
+};
+
 export const createEventBooking = async (
   data: EventBookingPayload,
 ): Promise<EventBookingResponse> => {
@@ -407,7 +485,7 @@ export const updateEventBooking = async (
   });
 
   if (existingEventBooking === null) {
-    throw new HttpError(404, "Event booking not found.");
+    throw eventBookingNotFoundError();
   }
 
   await assertReferencesExist(data);
@@ -453,7 +531,7 @@ export const updateEventBooking = async (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2025"
     ) {
-      throw new HttpError(404, "Event booking not found.");
+      throw eventBookingNotFoundError();
     }
 
     if (isForeignKeyError(error)) {
@@ -476,7 +554,7 @@ export const deleteEventBooking = async (id: string): Promise<void> => {
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2025"
     ) {
-      throw new HttpError(404, "Event booking not found.");
+      throw eventBookingNotFoundError();
     }
 
     throw error;

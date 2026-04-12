@@ -135,7 +135,20 @@ const parseEventBookingMode = (value: unknown): EventBookingMode => {
   return mode as EventBookingMode;
 };
 
-const parseEventBookingPayload = (value: unknown): EventBookingPayload => {
+const parseRequiredServiceProviderIds = (value: unknown): string[] => {
+  if (value === undefined) {
+    throw new HttpError(400, "serviceProviderIds is required.");
+  }
+
+  return parseServiceProviderIds(value);
+};
+
+const parseEventBookingPayload = (
+  value: unknown,
+  options?: {
+    requireServiceProviderIds?: boolean;
+  },
+): EventBookingPayload => {
   const payload = ensureObject(value, "body");
 
   return {
@@ -151,7 +164,9 @@ const parseEventBookingPayload = (value: unknown): EventBookingPayload => {
     phoneNumber2: parseOptionalString(payload.phoneNumber2, "phoneNumber2"),
     phoneNumber3: parseOptionalString(payload.phoneNumber3, "phoneNumber3"),
     referredBy: parseOptionalString(payload.referredBy, "referredBy"),
-    serviceProviderIds: parseServiceProviderIds(payload.serviceProviderIds),
+    serviceProviderIds: options?.requireServiceProviderIds
+      ? parseRequiredServiceProviderIds(payload.serviceProviderIds)
+      : parseServiceProviderIds(payload.serviceProviderIds),
   };
 };
 
@@ -190,4 +205,8 @@ export const parseListEventBookingsInput = (value: unknown): ListEventBookingsIn
 };
 
 export const parseCreateEventBookingInput = parseEventBookingPayload;
-export const parseUpdateEventBookingInput = parseEventBookingPayload;
+export const parseUpdateEventBookingInput = (value: unknown): EventBookingPayload => {
+  return parseEventBookingPayload(value, {
+    requireServiceProviderIds: true,
+  });
+};

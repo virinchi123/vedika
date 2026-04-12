@@ -653,6 +653,72 @@ Deletes a service provider by id. The request is rejected if any `Service` rows 
   - `404` service provider not found
   - `409` `Cannot delete service provider while services reference it.`
 
+## Services
+
+### GET /services/{id}
+
+Returns a service record by id.
+
+- Auth: bearer access token required
+- Path params:
+  - `id: string`
+- Success `200`:
+
+```json
+{
+  "service": {
+    "id": "uuid",
+    "createdAt": "2026-04-12T10:00:00.000Z",
+    "updatedAt": "2026-04-12T10:05:00.000Z",
+    "serviceProviderId": "uuid",
+    "eventBookingId": "uuid",
+    "contractedAmount": "12000.00",
+    "commissionAmount": "1200.00"
+  }
+}
+```
+
+- Common errors:
+  - `401` missing or invalid bearer token
+  - `404` service not found
+
+### PATCH /services/{id}
+
+Updates one or both editable amount fields on a service. Only `contractedAmount` and `commissionAmount` are accepted; omitted fields are left unchanged.
+
+- Auth: bearer access token required
+- Path params:
+  - `id: string`
+- Request body:
+
+```json
+{
+  "contractedAmount": "14000.00",
+  "commissionAmount": "1000.50"
+}
+```
+
+- Success `200`:
+
+```json
+{
+  "service": {
+    "id": "uuid",
+    "createdAt": "2026-04-12T10:00:00.000Z",
+    "updatedAt": "2026-04-12T10:05:00.000Z",
+    "serviceProviderId": "uuid",
+    "eventBookingId": "uuid",
+    "contractedAmount": "14000.00",
+    "commissionAmount": "1000.50"
+  }
+}
+```
+
+- Common errors:
+  - `400` invalid decimal strings, empty patch payloads, extra fields, or invalid amount relationships
+  - `401` missing or invalid bearer token
+  - `404` service not found
+
 ## Default Booking Configurations
 
 ### GET /default-booking-configurations

@@ -118,5 +118,6 @@ model CustomerInteraction {
   updatedAt       DateTime                @updatedAt
   interactionType CustomerInteractionType
   occurredAt      DateTime
+  ignored         Boolean                 @default(false)
   eventBookings   EventBooking[]
 }

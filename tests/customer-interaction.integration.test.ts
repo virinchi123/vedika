@@ -79,6 +79,12 @@ type CustomerInteractionPayloadOverrides = Partial<{
   eventBookingIds: string[];
 }>;
 
+const buildIgnoreCustomerInteractionPayload = (
+  ignored: boolean | unknown = true,
+) => ({
+  ignored,
+});
+
 const buildCustomerInteractionPayload = (
   overrides: CustomerInteractionPayloadOverrides = {},
 ) => {
@@ -94,11 +100,13 @@ const createCustomerInteractionRecord = async ({
   interactionType = CustomerInteractionType.PHONE_IN,
   occurredAt = "2026-04-19T11:15:00.000Z",
   createdAt = "2026-04-19T11:15:00.000Z",
+  ignored = false,
   eventBookingIds = [],
 }: Partial<{
   interactionType: CustomerInteractionType;
   occurredAt: string;
   createdAt: string;
+  ignored: boolean;
   eventBookingIds: string[];
 }> = {}) => {
   return prisma.customerInteraction.create({
@@ -106,6 +114,7 @@ const createCustomerInteractionRecord = async ({
       interactionType,
       occurredAt: new Date(occurredAt),
       createdAt: new Date(createdAt),
+      ignored,
       eventBookings: {
         connect: eventBookingIds.map((id) => ({ id })),
       },
@@ -142,6 +151,7 @@ describe("customer interaction routes", { skip: !customerInteractionTableExists 
       response.body.customerInteraction.occurredAt,
       "2026-04-22T08:00:00.000Z",
     );
+    assert.equal(response.body.customerInteraction.ignored, false);
     assert.deepEqual(response.body.customerInteraction.eventBookingIds, [
       firstEventBooking.id,
       secondEventBooking.id,
@@ -194,6 +204,7 @@ describe("customer interaction routes", { skip: !customerInteractionTableExists 
     assert.equal(response.body.pageInfo.limit, 2);
     assert.equal(response.body.pageInfo.hasNextPage, true);
     assert.ok(typeof response.body.pageInfo.nextCursor === "string");
+    assert.equal(response.body.customerInteractions[0].ignored, false);
     assert.deepEqual(response.body.customerInteractions[0].eventBookingIds, []);
   });
 
@@ -328,6 +339,104 @@ describe("customer interaction routes", { skip: !customerInteractionTableExists 
     assert.deepEqual(response.body.customerInteractions[1].eventBookingIds, []);
   });
 
+  it("lists customer interactions filtered by ignored=true", async () => {
+    const accessToken = await registerAndAuthenticate();
+    await createCustomerInteractionRecord({
+      interactionType: CustomerInteractionType.WALK_IN,
+      createdAt: "2026-04-10T10:00:00.000Z",
+      ignored: false,
+    });
+    await createCustomerInteractionRecord({
+      interactionType: CustomerInteractionType.PHONE_IN,
+      createdAt: "2026-04-11T10:00:00.000Z",
+      ignored: true,
+    });
+    await createCustomerInteractionRecord({
+      interactionType: CustomerInteractionType.MISSED_CALL,
+      createdAt: "2026-04-12T10:00:00.000Z",
+      ignored: true,
+    });
+
+    const response = await api
+      .get("/customer-interactions")
+      .query({
+        ignored: "true",
+      })
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(
+      response.body.customerInteractions.map(
+        (customerInteraction: {
+          interactionType: CustomerInteractionType;
+          ignored: boolean;
+        }) => ({
+          interactionType: customerInteraction.interactionType,
+          ignored: customerInteraction.ignored,
+        }),
+      ),
+      [
+        {
+          interactionType: CustomerInteractionType.MISSED_CALL,
+          ignored: true,
+        },
+        {
+          interactionType: CustomerInteractionType.PHONE_IN,
+          ignored: true,
+        },
+      ],
+    );
+  });
+
+  it("lists customer interactions filtered by ignored=false", async () => {
+    const accessToken = await registerAndAuthenticate();
+    await createCustomerInteractionRecord({
+      interactionType: CustomerInteractionType.WALK_IN,
+      createdAt: "2026-04-10T10:00:00.000Z",
+      ignored: true,
+    });
+    await createCustomerInteractionRecord({
+      interactionType: CustomerInteractionType.PHONE_IN,
+      createdAt: "2026-04-11T10:00:00.000Z",
+      ignored: false,
+    });
+    await createCustomerInteractionRecord({
+      interactionType: CustomerInteractionType.MISSED_CALL,
+      createdAt: "2026-04-12T10:00:00.000Z",
+      ignored: false,
+    });
+
+    const response = await api
+      .get("/customer-interactions")
+      .query({
+        ignored: "false",
+      })
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(
+      response.body.customerInteractions.map(
+        (customerInteraction: {
+          interactionType: CustomerInteractionType;
+          ignored: boolean;
+        }) => ({
+          interactionType: customerInteraction.interactionType,
+          ignored: customerInteraction.ignored,
+        }),
+      ),
+      [
+        {
+          interactionType: CustomerInteractionType.MISSED_CALL,
+          ignored: false,
+        },
+        {
+          interactionType: CustomerInteractionType.PHONE_IN,
+          ignored: false,
+        },
+      ],
+    );
+  });
+
   it("rejects using eventBookingId and unlinkedOnly together", async () => {
     const accessToken = await registerAndAuthenticate();
 
@@ -358,6 +467,20 @@ describe("customer interaction routes", { skip: !customerInteractionTableExists 
 
     assert.equal(response.status, 400);
     assert.equal(response.body.error, "unlinkedOnly must be a boolean.");
+  });
+
+  it("rejects an invalid ignored value", async () => {
+    const accessToken = await registerAndAuthenticate();
+
+    const response = await api
+      .get("/customer-interactions")
+      .query({
+        ignored: "maybe",
+      })
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.error, "ignored must be a boolean.");
   });
 
   it("returns not found when listing with an unknown event booking id", async () => {
@@ -401,6 +524,7 @@ describe("customer interaction routes", { skip: !customerInteractionTableExists 
       response.body.customerInteraction.occurredAt,
       "2026-04-19T11:15:00.000Z",
     );
+    assert.equal(response.body.customerInteraction.ignored, false);
     assert.deepEqual(response.body.customerInteraction.eventBookingIds, []);
 
     const storedCustomerInteraction = await prisma.customerInteraction.findUnique({
@@ -445,6 +569,7 @@ describe("customer interaction routes", { skip: !customerInteractionTableExists 
       response.body.customerInteraction.interactionType,
       CustomerInteractionType.WALK_IN,
     );
+    assert.equal(response.body.customerInteraction.ignored, false);
     assert.deepEqual(response.body.customerInteraction.eventBookingIds, [
       firstEventBooking.id,
       secondEventBooking.id,
@@ -567,6 +692,14 @@ describe("customer interaction routes", { skip: !customerInteractionTableExists 
     assert.equal(unauthenticatedDelete.status, 401);
   });
 
+  it("requires authentication for the ignore route", async () => {
+    const response = await api
+      .patch(`/customer-interactions/${crypto.randomUUID()}/ignore`)
+      .send(buildIgnoreCustomerInteractionPayload(true));
+
+    assert.equal(response.status, 401);
+  });
+
   it("updates a customer interaction and changes the event booking links", async () => {
     const accessToken = await registerAndAuthenticate();
     const firstReferences = await createEventBookingReferences();
@@ -606,6 +739,7 @@ describe("customer interaction routes", { skip: !customerInteractionTableExists 
     assert.deepEqual(response.body.customerInteraction.eventBookingIds, [
       replacementEventBooking.id,
     ]);
+    assert.equal(response.body.customerInteraction.ignored, false);
   });
 
   it("clears event booking ids on update when an empty array is provided", async () => {
@@ -635,6 +769,96 @@ describe("customer interaction routes", { skip: !customerInteractionTableExists 
 
     assert.equal(response.status, 200);
     assert.deepEqual(response.body.customerInteraction.eventBookingIds, []);
+    assert.equal(response.body.customerInteraction.ignored, false);
+  });
+
+  it("updates a customer interaction ignored state to true", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const existingCustomerInteraction = await createCustomerInteractionRecord();
+
+    const response = await api
+      .patch(`/customer-interactions/${existingCustomerInteraction.id}/ignore`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send(buildIgnoreCustomerInteractionPayload(true));
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.customerInteraction.id, existingCustomerInteraction.id);
+    assert.equal(response.body.customerInteraction.ignored, true);
+
+    const storedCustomerInteraction = await prisma.customerInteraction.findUnique({
+      where: {
+        id: existingCustomerInteraction.id,
+      },
+      select: {
+        ignored: true,
+      },
+    });
+
+    assert.deepEqual(storedCustomerInteraction, { ignored: true });
+  });
+
+  it("updates a customer interaction ignored state back to false", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const existingCustomerInteraction = await createCustomerInteractionRecord({
+      ignored: true,
+    });
+
+    const response = await api
+      .patch(`/customer-interactions/${existingCustomerInteraction.id}/ignore`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send(buildIgnoreCustomerInteractionPayload(false));
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.customerInteraction.ignored, false);
+
+    const storedCustomerInteraction = await prisma.customerInteraction.findUnique({
+      where: {
+        id: existingCustomerInteraction.id,
+      },
+      select: {
+        ignored: true,
+      },
+    });
+
+    assert.deepEqual(storedCustomerInteraction, { ignored: false });
+  });
+
+  it("returns not found when ignoring an unknown customer interaction", async () => {
+    const accessToken = await registerAndAuthenticate();
+
+    const response = await api
+      .patch(`/customer-interactions/${crypto.randomUUID()}/ignore`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send(buildIgnoreCustomerInteractionPayload(true));
+
+    assert.equal(response.status, 404);
+    assert.equal(response.body.error, "Customer interaction not found.");
+  });
+
+  it("rejects ignore requests without an ignored boolean", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const existingCustomerInteraction = await createCustomerInteractionRecord();
+
+    const response = await api
+      .patch(`/customer-interactions/${existingCustomerInteraction.id}/ignore`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({});
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.error, "ignored must be a boolean.");
+  });
+
+  it("rejects ignore requests with a non-boolean ignored value", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const existingCustomerInteraction = await createCustomerInteractionRecord();
+
+    const response = await api
+      .patch(`/customer-interactions/${existingCustomerInteraction.id}/ignore`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send(buildIgnoreCustomerInteractionPayload("true"));
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.error, "ignored must be a boolean.");
   });
 
   it("returns not found when updating an unknown customer interaction", async () => {

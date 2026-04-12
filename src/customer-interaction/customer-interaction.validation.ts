@@ -4,6 +4,7 @@ import { CustomerInteractionType } from "../generated/prisma/enums.js";
 import { createCrudValidators, ensureObject } from "../lib/crud-validation.js";
 import { parseCreatedAtCursor, parseCursorPageParams } from "../lib/listing.js";
 import type {
+  CustomerInteractionIgnoreInput,
   CustomerInteractionListCursor,
   CustomerInteractionPayload,
   ListCustomerInteractionsInput,
@@ -120,6 +121,39 @@ const parseOptionalBooleanQueryParam = (
   throw new HttpError(400, `${fieldName} must be a boolean.`);
 };
 
+const parseNullableBooleanQueryParam = (
+  value: unknown,
+  fieldName: string,
+): boolean | null => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (Array.isArray(value) || typeof value !== "string") {
+    throw new HttpError(400, `${fieldName} must be a boolean.`);
+  }
+
+  const normalizedValue = value.trim().toLowerCase();
+
+  if (normalizedValue === "true") {
+    return true;
+  }
+
+  if (normalizedValue === "false") {
+    return false;
+  }
+
+  throw new HttpError(400, `${fieldName} must be a boolean.`);
+};
+
+const parseRequiredBoolean = (value: unknown, fieldName: string): boolean => {
+  if (typeof value !== "boolean") {
+    throw new HttpError(400, `${fieldName} must be a boolean.`);
+  }
+
+  return value;
+};
+
 const customerInteractionValidators = createCrudValidators<
   CustomerInteractionPayload,
   CustomerInteractionListCursor
@@ -140,6 +174,7 @@ export const parseListCustomerInteractionsInput = (
   const eventBookingId = parseOptionalString(query.eventBookingId, {
     fieldName: "eventBookingId",
   });
+  const ignored = parseNullableBooleanQueryParam(query.ignored, "ignored");
   const unlinkedOnly = parseOptionalBooleanQueryParam(
     query.unlinkedOnly,
     "unlinkedOnly",
@@ -155,6 +190,7 @@ export const parseListCustomerInteractionsInput = (
   return {
     ...pageParams,
     eventBookingId,
+    ignored,
     unlinkedOnly,
   };
 };
@@ -164,3 +200,12 @@ export const parseCreateCustomerInteractionInput =
   customerInteractionValidators.parseCreateInput;
 export const parseUpdateCustomerInteractionInput =
   customerInteractionValidators.parseUpdateInput;
+export const parseIgnoreCustomerInteractionInput = (
+  value: unknown,
+): CustomerInteractionIgnoreInput => {
+  const payload = ensureObject(value, "body");
+
+  return {
+    ignored: parseRequiredBoolean(payload.ignored, "ignored"),
+  };
+};

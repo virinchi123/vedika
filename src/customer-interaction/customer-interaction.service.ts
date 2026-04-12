@@ -22,6 +22,7 @@ const customerInteractionSelect = {
   updatedAt: true,
   interactionType: true,
   occurredAt: true,
+  ignored: true,
   eventBookings: {
     select: {
       id: true,
@@ -42,6 +43,10 @@ export type CustomerInteractionPayload = {
   eventBookingIds: string[];
 };
 
+export type CustomerInteractionIgnoreInput = {
+  ignored: boolean;
+};
+
 export type CustomerInteractionResponse = Omit<
   CustomerInteractionRecord,
   "eventBookings"
@@ -51,6 +56,7 @@ export type CustomerInteractionResponse = Omit<
 export type CustomerInteractionListCursor = CreatedAtCursor;
 export type ListCustomerInteractionsInput = CursorPageParams<CustomerInteractionListCursor> & {
   eventBookingId: string | null;
+  ignored: boolean | null;
   unlinkedOnly: boolean;
 };
 export type ListCustomerInteractionsResponse = CursorListResult<CustomerInteractionResponse>;
@@ -143,6 +149,7 @@ export const listCustomerInteractions = async ({
   limit,
   cursor,
   eventBookingId,
+  ignored,
   unlinkedOnly,
 }: ListCustomerInteractionsInput): Promise<ListCustomerInteractionsResponse> => {
   if (eventBookingId !== null) {
@@ -163,6 +170,12 @@ export const listCustomerInteractions = async ({
           id: eventBookingId,
         },
       },
+    });
+  }
+
+  if (ignored !== null) {
+    whereConditions.push({
+      ignored,
     });
   }
 
@@ -240,6 +253,34 @@ export const updateCustomerInteraction = async (
 
     if (isForeignKeyError(error)) {
       throw eventBookingNotFoundError();
+    }
+
+    throw error;
+  }
+};
+
+export const updateCustomerInteractionIgnored = async (
+  id: string,
+  data: CustomerInteractionIgnoreInput,
+): Promise<CustomerInteractionResponse> => {
+  try {
+    const customerInteraction = await prisma.customerInteraction.update({
+      where: {
+        id,
+      },
+      data: {
+        ignored: data.ignored,
+      },
+      select: customerInteractionSelect,
+    });
+
+    return serializeCustomerInteraction(customerInteraction);
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2025"
+    ) {
+      throw customerInteractionNotFoundError();
     }
 
     throw error;

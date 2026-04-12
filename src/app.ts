@@ -7,6 +7,7 @@ import { defaultBookingConfigurationRouter } from "./default-booking-configurati
 import { eventBookingRouter } from "./event-booking/event-booking.router.js";
 import { eventStatusRouter } from "./event-status/event-status.router.js";
 import { eventTypeRouter } from "./event-type/event-type.router.js";
+import { followupRouter } from "./followup/followup.router.js";
 import { HttpError, isHttpError } from "./auth/http-error.js";
 import { serviceProviderRouter } from "./service-provider/service-provider.router.js";
 
@@ -28,6 +29,7 @@ app.use("/customer-interactions", customerInteractionRouter);
 app.use("/default-booking-configurations", defaultBookingConfigurationRouter);
 app.use("/event-statuses", eventStatusRouter);
 app.use("/event-types", eventTypeRouter);
+app.use("/followups", followupRouter);
 app.use("/service-providers", serviceProviderRouter);
 
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {

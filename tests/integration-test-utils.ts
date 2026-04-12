@@ -52,15 +52,27 @@ export const assertSafeTestDatabase = async (): Promise<void> => {
   hasValidatedTestDatabase = true;
 };
 
-const isMissingEventBookingTableError = (error: unknown): boolean => {
+const isMissingTableError = (error: unknown): boolean => {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2021";
+};
+
+const deleteFollowupsIfTableExists = async () => {
+  try {
+    await prisma.followup.deleteMany();
+  } catch (error) {
+    if (isMissingTableError(error)) {
+      return;
+    }
+
+    throw error;
+  }
 };
 
 const deleteCustomerInteractionsIfTableExists = async () => {
   try {
     await prisma.customerInteraction.deleteMany();
   } catch (error) {
-    if (isMissingEventBookingTableError(error)) {
+    if (isMissingTableError(error)) {
       return;
     }
 
@@ -72,7 +84,7 @@ const deleteEventBookingsIfTableExists = async () => {
   try {
     await prisma.eventBooking.deleteMany();
   } catch (error) {
-    if (isMissingEventBookingTableError(error)) {
+    if (isMissingTableError(error)) {
       return;
     }
 
@@ -82,6 +94,7 @@ const deleteEventBookingsIfTableExists = async () => {
 
 export const resetDatabase = async () => {
   await assertSafeTestDatabase();
+  await deleteFollowupsIfTableExists();
   await deleteCustomerInteractionsIfTableExists();
   await deleteEventBookingsIfTableExists();
   await prisma.bookingStatus.deleteMany();

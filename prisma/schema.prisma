@@ -13,6 +13,12 @@ enum EventBookingMode {
   WALK_IN
 }
 
+enum CustomerInteractionType {
+  WALK_IN
+  PHONE_IN
+  MISSED_CALL
+}
+
 model User {
   id           String    @id @default(uuid())
   emailAddress String    @unique
@@ -39,12 +45,12 @@ model Session {
 }
 
 model ServiceProvider {
-  id          String   @id @default(uuid())
-  name        String   @unique
-  phoneNumber String?
-  email       String?  @unique
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String         @id @default(uuid())
+  name          String         @unique
+  phoneNumber   String?
+  email         String?        @unique
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
   eventBookings EventBooking[]
 }
 
@@ -68,39 +74,52 @@ model DefaultBookingConfiguration {
 }
 
 model EventStatus {
-  id            String          @id @default(uuid())
-  createdAt     DateTime        @default(now())
-  name          String          @unique
-  updatedAt     DateTime        @updatedAt
+  id            String         @id @default(uuid())
+  createdAt     DateTime       @default(now())
+  name          String         @unique
+  updatedAt     DateTime       @updatedAt
   eventBookings EventBooking[]
 }
 
 model BookingStatus {
-  id            String          @id @default(uuid())
-  createdAt     DateTime        @default(now())
-  name          String          @unique
-  updatedAt     DateTime        @updatedAt
+  id            String         @id @default(uuid())
+  createdAt     DateTime       @default(now())
+  name          String         @unique
+  updatedAt     DateTime       @updatedAt
   eventBookings EventBooking[]
 }
 
 model EventBooking {
-  id              String           @id @default(uuid())
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  mode            EventBookingMode
-  bookingStatusId String
-  eventStatusId   String
-  eventTypeId     String
-  bookingStart    DateTime
-  bookingEnd      DateTime
-  muhurat         DateTime?
-  customerName    String
-  phoneNumber1    String
-  phoneNumber2    String?
-  phoneNumber3    String?
-  referredBy      String?
-  bookingStatus   BookingStatus    @relation(fields: [bookingStatusId], references: [id], onDelete: Restrict)
-  eventStatus     EventStatus      @relation(fields: [eventStatusId], references: [id], onDelete: Restrict)
-  eventType       EventType        @relation(fields: [eventTypeId], references: [id], onDelete: Restrict)
-  serviceProviders ServiceProvider[]
+  id                   String                @id @default(uuid())
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  mode                 EventBookingMode
+  bookingStatusId      String
+  eventStatusId        String
+  eventTypeId          String
+  bookingStart         DateTime
+  bookingEnd           DateTime
+  muhurat              DateTime?
+  customerName         String
+  phoneNumber1         String
+  phoneNumber2         String?
+  phoneNumber3         String?
+  referredBy           String?
+  bookingStatus        BookingStatus         @relation(fields: [bookingStatusId], references: [id], onDelete: Restrict)
+  eventStatus          EventStatus           @relation(fields: [eventStatusId], references: [id], onDelete: Restrict)
+  eventType            EventType             @relation(fields: [eventTypeId], references: [id], onDelete: Restrict)
+  serviceProviders     ServiceProvider[]
+  customerInteractions CustomerInteraction[]
+}
+
+model CustomerInteraction {
+  id              String                  @id @default(uuid())
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  interactionType CustomerInteractionType
+  occurredAt      DateTime
+  eventBookingId  String?
+  eventBooking    EventBooking?           @relation(fields: [eventBookingId], references: [id], onDelete: SetNull)
+
+  @@index([eventBookingId])
 }

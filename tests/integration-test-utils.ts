@@ -56,6 +56,18 @@ const isMissingEventBookingTableError = (error: unknown): boolean => {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2021";
 };
 
+const deleteCustomerInteractionsIfTableExists = async () => {
+  try {
+    await prisma.customerInteraction.deleteMany();
+  } catch (error) {
+    if (isMissingEventBookingTableError(error)) {
+      return;
+    }
+
+    throw error;
+  }
+};
+
 const deleteEventBookingsIfTableExists = async () => {
   try {
     await prisma.eventBooking.deleteMany();
@@ -70,6 +82,7 @@ const deleteEventBookingsIfTableExists = async () => {
 
 export const resetDatabase = async () => {
   await assertSafeTestDatabase();
+  await deleteCustomerInteractionsIfTableExists();
   await deleteEventBookingsIfTableExists();
   await prisma.bookingStatus.deleteMany();
   await prisma.defaultBookingConfiguration.deleteMany();

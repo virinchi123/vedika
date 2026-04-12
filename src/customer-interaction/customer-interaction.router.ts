@@ -1,6 +1,7 @@
 import { createCrudRouter } from "../lib/crud-router.js";
 import { asyncHandler } from "../lib/async-handler.js";
 import {
+  associateCustomerInteractionEventBookings,
   createCustomerInteraction,
   deleteCustomerInteraction,
   getCustomerInteractionById,
@@ -9,6 +10,7 @@ import {
   updateCustomerInteraction,
 } from "./customer-interaction.service.js";
 import {
+  parseAssociateCustomerInteractionEventBookingsInput,
   parseCreateCustomerInteractionInput,
   parseCustomerInteractionId,
   parseIgnoreCustomerInteractionInput,
@@ -43,6 +45,20 @@ export const customerInteractionRouter = createCrudRouter({
     handler: deleteCustomerInteraction,
   },
 });
+
+customerInteractionRouter.patch(
+  "/:id/event-bookings",
+  asyncHandler(async (request, response) => {
+    const customerInteraction = await associateCustomerInteractionEventBookings(
+      parseCustomerInteractionId(request.params.id),
+      parseAssociateCustomerInteractionEventBookingsInput(request.body),
+    );
+
+    response.status(200).json({
+      customerInteraction,
+    });
+  }),
+);
 
 customerInteractionRouter.patch(
   "/:id/ignore",

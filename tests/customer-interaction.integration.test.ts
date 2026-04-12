@@ -85,6 +85,12 @@ const buildIgnoreCustomerInteractionPayload = (
   ignored,
 });
 
+const buildAssociateEventBookingsPayload = (
+  eventBookingIds: string[] | unknown = [],
+) => ({
+  eventBookingIds,
+});
+
 const buildCustomerInteractionPayload = (
   overrides: CustomerInteractionPayloadOverrides = {},
 ) => {
@@ -772,6 +778,113 @@ describe("customer interaction routes", { skip: !customerInteractionTableExists 
     assert.equal(response.body.customerInteraction.ignored, false);
   });
 
+  it("associates one event booking with a customer interaction", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const references = await createEventBookingReferences();
+    const eventBooking = await createEventBookingRecord(references);
+    const existingCustomerInteraction = await createCustomerInteractionRecord();
+
+    const response = await api
+      .patch(`/customer-interactions/${existingCustomerInteraction.id}/event-bookings`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send(buildAssociateEventBookingsPayload([eventBooking.id]));
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.customerInteraction.id, existingCustomerInteraction.id);
+    assert.deepEqual(response.body.customerInteraction.eventBookingIds, [eventBooking.id]);
+    assert.equal(response.body.customerInteraction.ignored, false);
+  });
+
+  it("associates multiple event bookings with a customer interaction", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const firstReferences = await createEventBookingReferences();
+    const secondReferences = await createEventBookingReferences();
+    const firstEventBooking = await createEventBookingRecord(firstReferences);
+    const secondEventBooking = await createEventBookingRecord(secondReferences);
+    const existingCustomerInteraction = await createCustomerInteractionRecord();
+
+    const response = await api
+      .patch(`/customer-interactions/${existingCustomerInteraction.id}/event-bookings`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send(buildAssociateEventBookingsPayload([secondEventBooking.id, firstEventBooking.id]));
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body.customerInteraction.eventBookingIds, [
+      firstEventBooking.id,
+      secondEventBooking.id,
+    ].sort());
+  });
+
+  it("preserves existing event booking links when associating more", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const originalReferences = await createEventBookingReferences();
+    const additionalReferences = await createEventBookingReferences();
+    const originalEventBooking = await createEventBookingRecord(originalReferences);
+    const additionalEventBooking = await createEventBookingRecord(additionalReferences);
+    const existingCustomerInteraction = await createCustomerInteractionRecord({
+      eventBookingIds: [originalEventBooking.id],
+    });
+
+    const response = await api
+      .patch(`/customer-interactions/${existingCustomerInteraction.id}/event-bookings`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send(buildAssociateEventBookingsPayload([additionalEventBooking.id]));
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body.customerInteraction.eventBookingIds, [
+      additionalEventBooking.id,
+      originalEventBooking.id,
+    ].sort());
+  });
+
+  it("deduplicates event booking ids when associating bookings", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const firstReferences = await createEventBookingReferences();
+    const secondReferences = await createEventBookingReferences();
+    const firstEventBooking = await createEventBookingRecord(firstReferences);
+    const secondEventBooking = await createEventBookingRecord(secondReferences);
+    const existingCustomerInteraction = await createCustomerInteractionRecord();
+
+    const response = await api
+      .patch(`/customer-interactions/${existingCustomerInteraction.id}/event-bookings`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send(
+        buildAssociateEventBookingsPayload([
+          firstEventBooking.id,
+          firstEventBooking.id,
+          secondEventBooking.id,
+        ]),
+      );
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body.customerInteraction.eventBookingIds, [
+      firstEventBooking.id,
+      secondEventBooking.id,
+    ].sort());
+  });
+
+  it("is idempotent when associating already linked event bookings", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const firstReferences = await createEventBookingReferences();
+    const secondReferences = await createEventBookingReferences();
+    const firstEventBooking = await createEventBookingRecord(firstReferences);
+    const secondEventBooking = await createEventBookingRecord(secondReferences);
+    const existingCustomerInteraction = await createCustomerInteractionRecord({
+      eventBookingIds: [firstEventBooking.id],
+    });
+
+    const response = await api
+      .patch(`/customer-interactions/${existingCustomerInteraction.id}/event-bookings`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send(buildAssociateEventBookingsPayload([firstEventBooking.id, secondEventBooking.id]));
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body.customerInteraction.eventBookingIds, [
+      firstEventBooking.id,
+      secondEventBooking.id,
+    ].sort());
+  });
+
   it("updates a customer interaction ignored state to true", async () => {
     const accessToken = await registerAndAuthenticate();
     const existingCustomerInteraction = await createCustomerInteractionRecord();
@@ -835,6 +948,20 @@ describe("customer interaction routes", { skip: !customerInteractionTableExists 
     assert.equal(response.body.error, "Customer interaction not found.");
   });
 
+  it("returns not found when associating event bookings for an unknown customer interaction", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const references = await createEventBookingReferences();
+    const eventBooking = await createEventBookingRecord(references);
+
+    const response = await api
+      .patch(`/customer-interactions/${crypto.randomUUID()}/event-bookings`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send(buildAssociateEventBookingsPayload([eventBooking.id]));
+
+    assert.equal(response.status, 404);
+    assert.equal(response.body.error, "Customer interaction not found.");
+  });
+
   it("rejects ignore requests without an ignored boolean", async () => {
     const accessToken = await registerAndAuthenticate();
     const existingCustomerInteraction = await createCustomerInteractionRecord();
@@ -859,6 +986,45 @@ describe("customer interaction routes", { skip: !customerInteractionTableExists 
 
     assert.equal(response.status, 400);
     assert.equal(response.body.error, "ignored must be a boolean.");
+  });
+
+  it("rejects association requests without eventBookingIds", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const existingCustomerInteraction = await createCustomerInteractionRecord();
+
+    const response = await api
+      .patch(`/customer-interactions/${existingCustomerInteraction.id}/event-bookings`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({});
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.error, "eventBookingIds must be an array.");
+  });
+
+  it("rejects association requests with a non-array eventBookingIds value", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const existingCustomerInteraction = await createCustomerInteractionRecord();
+
+    const response = await api
+      .patch(`/customer-interactions/${existingCustomerInteraction.id}/event-bookings`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send(buildAssociateEventBookingsPayload("not-an-array"));
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.error, "eventBookingIds must be an array.");
+  });
+
+  it("rejects association requests with invalid event booking ids", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const existingCustomerInteraction = await createCustomerInteractionRecord();
+
+    const response = await api
+      .patch(`/customer-interactions/${existingCustomerInteraction.id}/event-bookings`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send(buildAssociateEventBookingsPayload([null]));
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.error, "eventBookingIds[0] is required.");
   });
 
   it("returns not found when updating an unknown customer interaction", async () => {
@@ -893,6 +1059,29 @@ describe("customer interaction routes", { skip: !customerInteractionTableExists 
 
     assert.equal(response.status, 404);
     assert.equal(response.body.error, "Event booking not found.");
+  });
+
+  it("returns not found when associating an unknown event booking id", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const existingCustomerInteraction = await createCustomerInteractionRecord();
+
+    const response = await api
+      .patch(`/customer-interactions/${existingCustomerInteraction.id}/event-bookings`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send(buildAssociateEventBookingsPayload([crypto.randomUUID()]));
+
+    assert.equal(response.status, 404);
+    assert.equal(response.body.error, "Event booking not found.");
+  });
+
+  it("requires authentication when associating event bookings", async () => {
+    const existingCustomerInteraction = await createCustomerInteractionRecord();
+
+    const response = await api
+      .patch(`/customer-interactions/${existingCustomerInteraction.id}/event-bookings`)
+      .send(buildAssociateEventBookingsPayload([]));
+
+    assert.equal(response.status, 401);
   });
 
   it("deletes a customer interaction by id", async () => {

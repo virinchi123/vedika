@@ -47,6 +47,10 @@ export type CustomerInteractionIgnoreInput = {
   ignored: boolean;
 };
 
+export type CustomerInteractionEventBookingAssociationInput = {
+  eventBookingIds: string[];
+};
+
 export type CustomerInteractionResponse = Omit<
   CustomerInteractionRecord,
   "eventBookings"
@@ -281,6 +285,55 @@ export const updateCustomerInteractionIgnored = async (
       error.code === "P2025"
     ) {
       throw customerInteractionNotFoundError();
+    }
+
+    throw error;
+  }
+};
+
+export const associateCustomerInteractionEventBookings = async (
+  id: string,
+  data: CustomerInteractionEventBookingAssociationInput,
+): Promise<CustomerInteractionResponse> => {
+  const existingCustomerInteraction = await prisma.customerInteraction.findUnique({
+    where: {
+      id,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (existingCustomerInteraction === null) {
+    throw customerInteractionNotFoundError();
+  }
+
+  await assertEventBookingsExist(data.eventBookingIds);
+
+  try {
+    const customerInteraction = await prisma.customerInteraction.update({
+      where: {
+        id,
+      },
+      data: {
+        eventBookings: {
+          connect: data.eventBookingIds.map((eventBookingId) => ({ id: eventBookingId })),
+        },
+      },
+      select: customerInteractionSelect,
+    });
+
+    return serializeCustomerInteraction(customerInteraction);
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2025"
+    ) {
+      throw customerInteractionNotFoundError();
+    }
+
+    if (isForeignKeyError(error)) {
+      throw eventBookingNotFoundError();
     }
 
     throw error;

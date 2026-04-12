@@ -4,6 +4,7 @@ import { CustomerInteractionType } from "../generated/prisma/enums.js";
 import { createCrudValidators, ensureObject } from "../lib/crud-validation.js";
 import { parseCreatedAtCursor, parseCursorPageParams } from "../lib/listing.js";
 import type {
+  CustomerInteractionEventBookingAssociationInput,
   CustomerInteractionIgnoreInput,
   CustomerInteractionListCursor,
   CustomerInteractionPayload,
@@ -88,6 +89,14 @@ const parseEventBookingIds = (value: unknown): string[] => {
       }),
     ),
   ];
+};
+
+const parseRequiredEventBookingIds = (value: unknown): string[] => {
+  if (value === undefined) {
+    throw new HttpError(400, "eventBookingIds must be an array.");
+  }
+
+  return parseEventBookingIds(value);
 };
 
 const parseCustomerInteractionListCursor = (
@@ -207,5 +216,15 @@ export const parseIgnoreCustomerInteractionInput = (
 
   return {
     ignored: parseRequiredBoolean(payload.ignored, "ignored"),
+  };
+};
+
+export const parseAssociateCustomerInteractionEventBookingsInput = (
+  value: unknown,
+): CustomerInteractionEventBookingAssociationInput => {
+  const payload = ensureObject(value, "body");
+
+  return {
+    eventBookingIds: parseRequiredEventBookingIds(payload.eventBookingIds),
   };
 };

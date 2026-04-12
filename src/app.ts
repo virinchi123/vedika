@@ -3,6 +3,7 @@ import express from "express";
 import { authRouter } from "./auth/auth.router.js";
 import { bookingStatusRouter } from "./booking-status/booking-status.router.js";
 import { defaultBookingConfigurationRouter } from "./default-booking-configuration/default-booking-configuration.router.js";
+import { eventBookingRouter } from "./event-booking/event-booking.router.js";
 import { eventStatusRouter } from "./event-status/event-status.router.js";
 import { eventTypeRouter } from "./event-type/event-type.router.js";
 import { HttpError, isHttpError } from "./auth/http-error.js";
@@ -20,6 +21,7 @@ app.get("/health", (_request, response) => {
 });
 
 app.use("/auth", authRouter);
+app.use("/event-bookings", eventBookingRouter);
 app.use("/booking-statuses", bookingStatusRouter);
 app.use("/default-booking-configurations", defaultBookingConfigurationRouter);
 app.use("/event-statuses", eventStatusRouter);

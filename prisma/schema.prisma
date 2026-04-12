@@ -8,6 +8,11 @@ datasource db {
   provider = "postgresql"
 }
 
+enum EventBookingMode {
+  PHONE_IN
+  WALK_IN
+}
+
 model User {
   id           String    @id @default(uuid())
   emailAddress String    @unique
@@ -47,6 +52,7 @@ model EventType {
   createdAt                   DateTime                     @default(now())
   name                        String                       @unique
   updatedAt                   DateTime                     @updatedAt
+  eventBookings               EventBooking[]
   defaultBookingConfiguration DefaultBookingConfiguration?
 }
 
@@ -61,15 +67,38 @@ model DefaultBookingConfiguration {
 }
 
 model EventStatus {
-  id        String   @id @default(uuid())
-  createdAt DateTime @default(now())
-  name      String   @unique
-  updatedAt DateTime @updatedAt
+  id            String          @id @default(uuid())
+  createdAt     DateTime        @default(now())
+  name          String          @unique
+  updatedAt     DateTime        @updatedAt
+  eventBookings EventBooking[]
 }
 
 model BookingStatus {
-  id        String   @id @default(uuid())
-  createdAt DateTime @default(now())
-  name      String   @unique
-  updatedAt DateTime @updatedAt
+  id            String          @id @default(uuid())
+  createdAt     DateTime        @default(now())
+  name          String          @unique
+  updatedAt     DateTime        @updatedAt
+  eventBookings EventBooking[]
+}
+
+model EventBooking {
+  id              String           @id @default(uuid())
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  mode            EventBookingMode
+  bookingStatusId String
+  eventStatusId   String
+  eventTypeId     String
+  bookingStart    DateTime
+  bookingEnd      DateTime
+  muhurat         DateTime?
+  customerName    String
+  phoneNumber1    String
+  phoneNumber2    String?
+  phoneNumber3    String?
+  referredBy      String?
+  bookingStatus   BookingStatus    @relation(fields: [bookingStatusId], references: [id], onDelete: Restrict)
+  eventStatus     EventStatus      @relation(fields: [eventStatusId], references: [id], onDelete: Restrict)
+  eventType       EventType        @relation(fields: [eventTypeId], references: [id], onDelete: Restrict)
 }

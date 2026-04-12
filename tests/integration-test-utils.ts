@@ -4,6 +4,7 @@ import { after, beforeEach } from "node:test";
 import request from "supertest";
 
 import { resetAuthRateLimit } from "../src/auth/auth.router.js";
+import { Prisma } from "../src/generated/prisma/client.js";
 import { app } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
 
@@ -51,8 +52,25 @@ export const assertSafeTestDatabase = async (): Promise<void> => {
   hasValidatedTestDatabase = true;
 };
 
+const isMissingEventBookingTableError = (error: unknown): boolean => {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2021";
+};
+
+const deleteEventBookingsIfTableExists = async () => {
+  try {
+    await prisma.eventBooking.deleteMany();
+  } catch (error) {
+    if (isMissingEventBookingTableError(error)) {
+      return;
+    }
+
+    throw error;
+  }
+};
+
 export const resetDatabase = async () => {
   await assertSafeTestDatabase();
+  await deleteEventBookingsIfTableExists();
   await prisma.bookingStatus.deleteMany();
   await prisma.defaultBookingConfiguration.deleteMany();
   await prisma.eventStatus.deleteMany();

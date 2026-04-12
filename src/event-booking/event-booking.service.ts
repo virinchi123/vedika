@@ -42,6 +42,7 @@ export type EventBookingPayload = {
   phoneNumber2: string | null;
   phoneNumber3: string | null;
   referredBy: string | null;
+  serviceProviderIds: string[];
 };
 
 export type EventBookingResponse = EventBookingRecord;
@@ -49,6 +50,7 @@ export type EventBookingResponse = EventBookingRecord;
 const bookingStatusNotFoundError = () => new HttpError(404, "Booking status not found.");
 const eventStatusNotFoundError = () => new HttpError(404, "Event status not found.");
 const eventTypeNotFoundError = () => new HttpError(404, "Event type not found.");
+const serviceProviderNotFoundError = () => new HttpError(404, "Service provider not found.");
 
 const assertBookingStatusExists = async (bookingStatusId: string): Promise<void> => {
   const bookingStatus = await prisma.bookingStatus.findUnique({
@@ -95,10 +97,32 @@ const assertEventTypeExists = async (eventTypeId: string): Promise<void> => {
   }
 };
 
+const assertServiceProvidersExist = async (serviceProviderIds: string[]): Promise<void> => {
+  if (serviceProviderIds.length === 0) {
+    return;
+  }
+
+  const serviceProviders = await prisma.serviceProvider.findMany({
+    where: {
+      id: {
+        in: serviceProviderIds,
+      },
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (serviceProviders.length !== serviceProviderIds.length) {
+    throw serviceProviderNotFoundError();
+  }
+};
+
 const assertReferencesExist = async (data: EventBookingPayload): Promise<void> => {
   await assertBookingStatusExists(data.bookingStatusId);
   await assertEventStatusExists(data.eventStatusId);
   await assertEventTypeExists(data.eventTypeId);
+  await assertServiceProvidersExist(data.serviceProviderIds);
 };
 
 const findMissingReferenceError = async (
@@ -143,6 +167,25 @@ const findMissingReferenceError = async (
     return eventTypeNotFoundError();
   }
 
+  if (data.serviceProviderIds.length === 0) {
+    return null;
+  }
+
+  const serviceProviders = await prisma.serviceProvider.findMany({
+    where: {
+      id: {
+        in: data.serviceProviderIds,
+      },
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (serviceProviders.length !== data.serviceProviderIds.length) {
+    return serviceProviderNotFoundError();
+  }
+
   return null;
 };
 
@@ -154,10 +197,16 @@ export const createEventBooking = async (
   data: EventBookingPayload,
 ): Promise<EventBookingResponse> => {
   await assertReferencesExist(data);
+  const { serviceProviderIds, ...eventBookingData } = data;
 
   try {
     return await prisma.eventBooking.create({
-      data,
+      data: {
+        ...eventBookingData,
+        serviceProviders: {
+          connect: serviceProviderIds.map((id) => ({ id })),
+        },
+      },
       select: eventBookingSelect,
     });
   } catch (error) {
@@ -187,13 +236,19 @@ export const updateEventBooking = async (
   }
 
   await assertReferencesExist(data);
+  const { serviceProviderIds, ...eventBookingData } = data;
 
   try {
     return await prisma.eventBooking.update({
       where: {
         id,
       },
-      data,
+      data: {
+        ...eventBookingData,
+        serviceProviders: {
+          set: serviceProviderIds.map((providerId) => ({ id: providerId })),
+        },
+      },
       select: eventBookingSelect,
     });
   } catch (error) {

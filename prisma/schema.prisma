@@ -45,6 +45,7 @@ model ServiceProvider {
   email       String?  @unique
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  eventBookings EventBooking[]
 }
 
 model EventType {
@@ -101,4 +102,5 @@ model EventBooking {
   bookingStatus   BookingStatus    @relation(fields: [bookingStatusId], references: [id], onDelete: Restrict)
   eventStatus     EventStatus      @relation(fields: [eventStatusId], references: [id], onDelete: Restrict)
   eventType       EventType        @relation(fields: [eventTypeId], references: [id], onDelete: Restrict)
+  serviceProviders ServiceProvider[]
 }

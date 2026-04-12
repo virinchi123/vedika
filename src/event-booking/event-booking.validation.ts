@@ -54,6 +54,18 @@ const parseOptionalString = (value: unknown, fieldName: string): string | null =
   return normalizedValue === "" ? null : normalizedValue;
 };
 
+const parseServiceProviderIds = (value: unknown): string[] => {
+  if (value === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    throw new HttpError(400, "serviceProviderIds must be an array.");
+  }
+
+  return [...new Set(value.map((item, index) => ensureRequiredString(item, `serviceProviderIds[${index}]`)))];
+};
+
 const parseEventBookingMode = (value: unknown): EventBookingMode => {
   const mode = ensureRequiredString(value, "mode");
 
@@ -80,6 +92,7 @@ const parseEventBookingPayload = (value: unknown): EventBookingPayload => {
     phoneNumber2: parseOptionalString(payload.phoneNumber2, "phoneNumber2"),
     phoneNumber3: parseOptionalString(payload.phoneNumber3, "phoneNumber3"),
     referredBy: parseOptionalString(payload.referredBy, "referredBy"),
+    serviceProviderIds: parseServiceProviderIds(payload.serviceProviderIds),
   };
 };
 

@@ -642,7 +642,7 @@ Replaces a service provider record. `name` is required; blank optional strings b
 
 ### DELETE /service-providers/{id}
 
-Deletes a service provider by id.
+Deletes a service provider by id. The request is rejected if any `Service` rows still reference the provider.
 
 - Auth: bearer access token required
 - Path params:
@@ -651,6 +651,7 @@ Deletes a service provider by id.
 - Common errors:
   - `401` missing or invalid bearer token
   - `404` service provider not found
+  - `409` `Cannot delete service provider while services reference it.`
 
 ## Default Booking Configurations
 
@@ -777,7 +778,7 @@ Lists event bookings using cursor pagination. Filters can be combined, and date 
 
 ### POST /event-bookings
 
-Creates an event booking. `serviceProviderIds` can be supplied, but the response currently does not echo provider ids back.
+Creates an event booking. `serviceProviderIds` can be supplied; each selected provider is linked to the booking and synced to a backing `Service` row. The response currently does not echo provider ids back.
 
 - Auth: bearer access token required
 - Request body:
@@ -833,7 +834,7 @@ Creates an event booking. `serviceProviderIds` can be supplied, but the response
 
 ### PUT /event-bookings/{id}
 
-Replaces an event booking. This is a full update, and omitting `serviceProviderIds` clears all linked providers.
+Replaces an event booking. This is a full update, and omitting `serviceProviderIds` clears all linked providers. The final provider selection is also synced to backing `Service` rows: retained providers keep existing service rows, removed providers lose them, and newly added providers get new ones.
 
 - Auth: bearer access token required
 - Path params:
@@ -891,7 +892,7 @@ Replaces an event booking. This is a full update, and omitting `serviceProviderI
 
 ### DELETE /event-bookings/{id}
 
-Deletes an event booking by id.
+Deletes an event booking by id. Linked `Service` rows are deleted automatically.
 
 - Auth: bearer access token required
 - Path params:

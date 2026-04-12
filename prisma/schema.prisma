@@ -58,6 +58,7 @@ model ServiceProvider {
   updatedAt     DateTime       @updatedAt
   eventBookings EventBooking[]
   followups     Followup[]
+  services      Service[]
 }
 
 model EventType {
@@ -117,6 +118,23 @@ model EventBooking {
   serviceProviders     ServiceProvider[]
   customerInteractions CustomerInteraction[]
   followups            Followup[]
+  services             Service[]
+}
+
+model Service {
+  id               String          @id @default(uuid())
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  serviceProviderId String
+  eventBookingId   String
+  contractedAmount Decimal?        @db.Decimal(10, 2)
+  commissionAmount Decimal?        @db.Decimal(10, 2)
+  serviceProvider  ServiceProvider @relation(fields: [serviceProviderId], references: [id], onDelete: Restrict)
+  eventBooking     EventBooking    @relation(fields: [eventBookingId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceProviderId, eventBookingId])
+  @@index([serviceProviderId])
+  @@index([eventBookingId])
 }
 
 model CustomerInteraction {

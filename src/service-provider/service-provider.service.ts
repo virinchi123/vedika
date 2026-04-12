@@ -2,6 +2,8 @@ import type {
   ServiceProviderGetPayload,
   ServiceProviderSelect,
 } from "../generated/prisma/models/ServiceProvider.js";
+import { Prisma } from "../generated/prisma/client.js";
+import { HttpError } from "../auth/http-error.js";
 import {
   type CreatedAtCursor,
   type CursorListResult,
@@ -54,4 +56,20 @@ export const createServiceProvider = serviceProviderCrud.create;
 export const listServiceProviders: (input: ListServiceProvidersInput) => Promise<ListServiceProvidersResponse> =
   serviceProviderCrud.list;
 export const updateServiceProvider = serviceProviderCrud.update;
-export const deleteServiceProvider = serviceProviderCrud.remove;
+export const deleteServiceProvider = async (id: string): Promise<void> => {
+  try {
+    await serviceProviderCrud.remove(id);
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2003"
+    ) {
+      throw new HttpError(
+        409,
+        "Cannot delete service provider while services reference it.",
+      );
+    }
+
+    throw error;
+  }
+};

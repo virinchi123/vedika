@@ -17,6 +17,30 @@ const createServiceProviderRecord = async (name: string, createdAt: string) => {
   });
 };
 
+const createReferences = async () => {
+  const bookingStatus = await prisma.bookingStatus.create({
+    data: {
+      name: `Booking Status ${crypto.randomUUID()}`,
+    },
+  });
+  const eventStatus = await prisma.eventStatus.create({
+    data: {
+      name: `Event Status ${crypto.randomUUID()}`,
+    },
+  });
+  const eventType = await prisma.eventType.create({
+    data: {
+      name: `Event Type ${crypto.randomUUID()}`,
+    },
+  });
+
+  return {
+    bookingStatus,
+    eventStatus,
+    eventType,
+  };
+};
+
 setupIntegrationTestLifecycle();
 
 describe("service provider routes", () => {
@@ -262,5 +286,54 @@ describe("service provider routes", () => {
     });
 
     assert.equal(serviceProvider, null);
+  });
+
+  it("rejects deleting a service provider when services reference it", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const references = await createReferences();
+    const existingServiceProvider = await prisma.serviceProvider.create({
+      data: {
+        name: "Acme Services",
+      },
+    });
+    const eventBooking = await prisma.eventBooking.create({
+      data: {
+        mode: "PHONE_IN",
+        bookingStatusId: references.bookingStatus.id,
+        eventStatusId: references.eventStatus.id,
+        eventTypeId: references.eventType.id,
+        bookingStart: new Date("2026-04-20T10:00:00.000Z"),
+        bookingEnd: new Date("2026-04-20T12:00:00.000Z"),
+        customerName: "Priya Sharma",
+        phoneNumber1: "9876543210",
+        serviceProviders: {
+          connect: [{ id: existingServiceProvider.id }],
+        },
+      },
+    });
+    await prisma.service.create({
+      data: {
+        serviceProviderId: existingServiceProvider.id,
+        eventBookingId: eventBooking.id,
+      },
+    });
+
+    const response = await api
+      .delete(`/service-providers/${existingServiceProvider.id}`)
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    assert.equal(response.status, 409);
+    assert.equal(
+      response.body.error,
+      "Cannot delete service provider while services reference it.",
+    );
+
+    const serviceProvider = await prisma.serviceProvider.findUnique({
+      where: {
+        id: existingServiceProvider.id,
+      },
+    });
+
+    assert.ok(serviceProvider);
   });
 });

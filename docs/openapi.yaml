@@ -499,7 +499,7 @@ paths:
       tags: [Service Providers]
       operationId: deleteServiceProvider
       summary: Delete service provider
-      description: Deletes a service provider by id.
+      description: Deletes a service provider by id. The request is rejected if any `Service` rows still reference the provider.
       security:
         - bearerAuth: []
       parameters:
@@ -511,6 +511,8 @@ paths:
           $ref: '#/components/responses/UnauthorizedResponse'
         '404':
           $ref: '#/components/responses/NotFoundResponse'
+        '409':
+          $ref: '#/components/responses/ConflictResponse'
 
   /default-booking-configurations:
     get:
@@ -628,7 +630,8 @@ paths:
       description: |
         Creates an event booking.
 
-        `serviceProviderIds` can be supplied on create, but the response does not currently return provider ids.
+        `serviceProviderIds` can be supplied on create. Each selected provider is linked to the booking and
+        automatically synced to a backing `Service` row. The response does not currently return provider ids.
       security:
         - bearerAuth: []
       requestBody:
@@ -660,7 +663,8 @@ paths:
         Replaces an event booking.
 
         This is a full update. Omitting `serviceProviderIds` clears all linked providers, and the response still does
-        not echo provider ids back.
+        not echo provider ids back. The final provider selection is also synced to backing `Service` rows: retained
+        providers keep their existing service rows, removed providers lose them, and newly added providers get new ones.
       security:
         - bearerAuth: []
       parameters:
@@ -688,7 +692,7 @@ paths:
       tags: [Event Bookings]
       operationId: deleteEventBooking
       summary: Delete event booking
-      description: Deletes an event booking by id.
+      description: Deletes an event booking by id. Linked `Service` rows are deleted automatically.
       security:
         - bearerAuth: []
       parameters:

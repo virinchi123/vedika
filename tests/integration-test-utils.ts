@@ -68,6 +68,18 @@ const deleteFollowupsIfTableExists = async () => {
   }
 };
 
+const deleteServicesIfTableExists = async () => {
+  try {
+    await prisma.service.deleteMany();
+  } catch (error) {
+    if (isMissingTableError(error)) {
+      return;
+    }
+
+    throw error;
+  }
+};
+
 const deleteCustomerInteractionsIfTableExists = async () => {
   try {
     await prisma.customerInteraction.deleteMany();
@@ -95,6 +107,7 @@ const deleteEventBookingsIfTableExists = async () => {
 export const resetDatabase = async () => {
   await assertSafeTestDatabase();
   await deleteFollowupsIfTableExists();
+  await deleteServicesIfTableExists();
   await deleteCustomerInteractionsIfTableExists();
   await deleteEventBookingsIfTableExists();
   await prisma.bookingStatus.deleteMany();

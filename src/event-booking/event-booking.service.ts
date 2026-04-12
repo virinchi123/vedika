@@ -210,6 +210,67 @@ const isForeignKeyError = (error: unknown): boolean => {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003";
 };
 
+const buildServiceRows = (
+  eventBookingId: string,
+  serviceProviderIds: string[],
+): Array<{
+  eventBookingId: string;
+  serviceProviderId: string;
+  contractedAmount: null;
+  commissionAmount: null;
+}> => {
+  return serviceProviderIds.map((serviceProviderId) => ({
+    eventBookingId,
+    serviceProviderId,
+    contractedAmount: null,
+    commissionAmount: null,
+  }));
+};
+
+const syncServicesForEventBooking = async (
+  tx: Prisma.TransactionClient,
+  eventBookingId: string,
+  serviceProviderIds: string[],
+): Promise<void> => {
+  const existingServices = await tx.service.findMany({
+    where: {
+      eventBookingId,
+    },
+    select: {
+      serviceProviderId: true,
+    },
+  });
+
+  const nextProviderIds = new Set(serviceProviderIds);
+  const existingProviderIds = new Set(
+    existingServices.map((service) => service.serviceProviderId),
+  );
+
+  const providerIdsToCreate = serviceProviderIds.filter(
+    (serviceProviderId) => !existingProviderIds.has(serviceProviderId),
+  );
+  const providerIdsToDelete = existingServices
+    .map((service) => service.serviceProviderId)
+    .filter((serviceProviderId) => !nextProviderIds.has(serviceProviderId));
+
+  if (providerIdsToCreate.length > 0) {
+    await tx.service.createMany({
+      data: buildServiceRows(eventBookingId, providerIdsToCreate),
+    });
+  }
+
+  if (providerIdsToDelete.length > 0) {
+    await tx.service.deleteMany({
+      where: {
+        eventBookingId,
+        serviceProviderId: {
+          in: providerIdsToDelete,
+        },
+      },
+    });
+  }
+};
+
 export const listEventBookings = async ({
   limit,
   cursor,
@@ -294,14 +355,24 @@ export const createEventBooking = async (
   const { serviceProviderIds, ...eventBookingData } = data;
 
   try {
-    return await prisma.eventBooking.create({
-      data: {
-        ...eventBookingData,
-        serviceProviders: {
-          connect: serviceProviderIds.map((id) => ({ id })),
+    return await prisma.$transaction(async (tx) => {
+      const eventBooking = await tx.eventBooking.create({
+        data: {
+          ...eventBookingData,
+          serviceProviders: {
+            connect: serviceProviderIds.map((id) => ({ id })),
+          },
         },
-      },
-      select: eventBookingSelect,
+        select: eventBookingSelect,
+      });
+
+      if (serviceProviderIds.length > 0) {
+        await tx.service.createMany({
+          data: buildServiceRows(eventBooking.id, serviceProviderIds),
+        });
+      }
+
+      return eventBooking;
     });
   } catch (error) {
     if (isForeignKeyError(error)) {
@@ -322,6 +393,16 @@ export const updateEventBooking = async (
     },
     select: {
       id: true,
+      serviceProviders: {
+        select: {
+          id: true,
+        },
+      },
+      services: {
+        select: {
+          serviceProviderId: true,
+        },
+      },
     },
   });
 
@@ -333,17 +414,39 @@ export const updateEventBooking = async (
   const { serviceProviderIds, ...eventBookingData } = data;
 
   try {
-    return await prisma.eventBooking.update({
-      where: {
-        id,
-      },
-      data: {
-        ...eventBookingData,
-        serviceProviders: {
-          set: serviceProviderIds.map((providerId) => ({ id: providerId })),
+    return await prisma.$transaction(async (tx) => {
+      const updatedEventBooking = await tx.eventBooking.update({
+        where: {
+          id,
         },
-      },
-      select: eventBookingSelect,
+        data: {
+          ...eventBookingData,
+          serviceProviders: {
+            set: serviceProviderIds.map((providerId) => ({ id: providerId })),
+          },
+        },
+        select: eventBookingSelect,
+      });
+
+      const currentProviderIds = new Set(
+        existingEventBooking.serviceProviders.map((provider) => provider.id),
+      );
+      const currentServiceProviderIds = new Set(
+        existingEventBooking.services.map((service) => service.serviceProviderId),
+      );
+      const nextProviderIds = new Set(serviceProviderIds);
+      const needsServiceSync =
+        serviceProviderIds.some((serviceProviderId) => !currentProviderIds.has(serviceProviderId)) ||
+        serviceProviderIds.some((serviceProviderId) => !currentServiceProviderIds.has(serviceProviderId)) ||
+        existingEventBooking.services.some(
+          (service) => !nextProviderIds.has(service.serviceProviderId),
+        );
+
+      if (needsServiceSync) {
+        await syncServicesForEventBooking(tx, id, serviceProviderIds);
+      }
+
+      return updatedEventBooking;
     });
   } catch (error) {
     if (

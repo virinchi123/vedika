@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { Prisma } from "../src/generated/prisma/client.js";
 import { EventBookingMode } from "../src/generated/prisma/enums.js";
 import { prisma } from "../src/lib/prisma.js";
 import {
@@ -134,6 +135,23 @@ const createEventBookingRecord = async (
         connect: [],
       },
       ...overrides,
+    },
+  });
+};
+
+const listServicesForEventBooking = async (eventBookingId: string) => {
+  return prisma.service.findMany({
+    where: {
+      eventBookingId,
+    },
+    select: {
+      id: true,
+      serviceProviderId: true,
+      contractedAmount: true,
+      commissionAmount: true,
+    },
+    orderBy: {
+      serviceProviderId: "asc",
     },
   });
 };
@@ -561,6 +579,29 @@ describe("event booking routes", { skip: !eventBookingTableExists }, () => {
       storedEventBooking?.serviceProviders.map((provider) => provider.id),
       [providerOne.id, providerTwo.id].sort(),
     );
+
+    const storedServices = await listServicesForEventBooking(response.body.eventBooking.id);
+
+    assert.deepEqual(
+      storedServices.map((service) => service.serviceProviderId),
+      [providerOne.id, providerTwo.id].sort(),
+    );
+    assert.deepEqual(
+      storedServices.map((service) => ({
+        contractedAmount: service.contractedAmount,
+        commissionAmount: service.commissionAmount,
+      })),
+      [
+        {
+          contractedAmount: null,
+          commissionAmount: null,
+        },
+        {
+          contractedAmount: null,
+          commissionAmount: null,
+        },
+      ],
+    );
   });
 
   it("creates an event booking with no providers when serviceProviderIds is omitted", async () => {
@@ -591,6 +632,10 @@ describe("event booking routes", { skip: !eventBookingTableExists }, () => {
     });
 
     assert.deepEqual(storedEventBooking?.serviceProviders, []);
+
+    const storedServices = await listServicesForEventBooking(response.body.eventBooking.id);
+
+    assert.deepEqual(storedServices, []);
   });
 
   it("deduplicates service provider ids on create", async () => {
@@ -623,6 +668,10 @@ describe("event booking routes", { skip: !eventBookingTableExists }, () => {
     });
 
     assert.deepEqual(storedEventBooking?.serviceProviders.map((item) => item.id), [provider.id]);
+
+    const storedServices = await listServicesForEventBooking(response.body.eventBooking.id);
+
+    assert.deepEqual(storedServices.map((service) => service.serviceProviderId), [provider.id]);
   });
 
   it("rejects unauthenticated create requests", async () => {
@@ -775,6 +824,14 @@ describe("event booking routes", { skip: !eventBookingTableExists }, () => {
         },
       },
     });
+    await prisma.service.create({
+      data: {
+        serviceProviderId: originalProvider.id,
+        eventBookingId: existingEventBooking.id,
+        contractedAmount: new Prisma.Decimal("5000.00"),
+        commissionAmount: new Prisma.Decimal("500.00"),
+      },
+    });
 
     const response = await api
       .put(`/event-bookings/${existingEventBooking.id}`)
@@ -842,6 +899,68 @@ describe("event booking routes", { skip: !eventBookingTableExists }, () => {
       storedEventBooking?.serviceProviders.some((provider) => provider.id === originalProvider.id),
       false,
     );
+
+    const storedServices = await listServicesForEventBooking(existingEventBooking.id);
+
+    assert.deepEqual(
+      storedServices.map((service) => service.serviceProviderId),
+      [replacementProviderOne.id, replacementProviderTwo.id].sort(),
+    );
+    assert.deepEqual(
+      storedServices.map((service) => ({
+        contractedAmount: service.contractedAmount,
+        commissionAmount: service.commissionAmount,
+      })),
+      [
+        {
+          contractedAmount: null,
+          commissionAmount: null,
+        },
+        {
+          contractedAmount: null,
+          commissionAmount: null,
+        },
+      ],
+    );
+  });
+
+  it("preserves existing service amounts for retained providers on update", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const references = await createReferences();
+    const provider = await createServiceProviderRecord(`Provider ${crypto.randomUUID()}`);
+    const existingEventBooking = await createEventBookingRecord(references, {
+      serviceProviders: {
+        connect: [{ id: provider.id }],
+      },
+    });
+    const existingService = await prisma.service.create({
+      data: {
+        serviceProviderId: provider.id,
+        eventBookingId: existingEventBooking.id,
+        contractedAmount: new Prisma.Decimal("12000.00"),
+        commissionAmount: new Prisma.Decimal("1200.00"),
+      },
+    });
+
+    const response = await api
+      .put(`/event-bookings/${existingEventBooking.id}`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send(
+        buildEventBookingPayload(references, {
+          customerName: "Updated Customer",
+          serviceProviderIds: [provider.id],
+        }),
+      );
+
+    assert.equal(response.status, 200);
+
+    const storedServices = await listServicesForEventBooking(existingEventBooking.id);
+
+    assert.equal(storedServices.length, 1);
+    assert.equal(storedServices[0]?.id, existingService.id);
+    assert.equal(storedServices[0]?.serviceProviderId, provider.id);
+    assert.equal(storedServices[0]?.contractedAmount?.toString(), "12000");
+    assert.equal(storedServices[0]?.commissionAmount?.toString(), "1200");
   });
 
   it("clears providers on update when serviceProviderIds is omitted", async () => {
@@ -851,6 +970,12 @@ describe("event booking routes", { skip: !eventBookingTableExists }, () => {
     const existingEventBooking = await createEventBookingRecord(references, {
       serviceProviders: {
         connect: [{ id: provider.id }],
+      },
+    });
+    await prisma.service.create({
+      data: {
+        serviceProviderId: provider.id,
+        eventBookingId: existingEventBooking.id,
       },
     });
     const payload = buildEventBookingPayload(references);
@@ -878,6 +1003,10 @@ describe("event booking routes", { skip: !eventBookingTableExists }, () => {
     });
 
     assert.deepEqual(storedEventBooking?.serviceProviders, []);
+
+    const storedServices = await listServicesForEventBooking(existingEventBooking.id);
+
+    assert.deepEqual(storedServices, []);
   });
 
   it("rejects unauthenticated update requests", async () => {
@@ -943,7 +1072,18 @@ describe("event booking routes", { skip: !eventBookingTableExists }, () => {
   it("deletes an event booking by id", async () => {
     const accessToken = await registerAndAuthenticate();
     const references = await createReferences();
-    const existingEventBooking = await createEventBookingRecord(references);
+    const provider = await createServiceProviderRecord(`Provider ${crypto.randomUUID()}`);
+    const existingEventBooking = await createEventBookingRecord(references, {
+      serviceProviders: {
+        connect: [{ id: provider.id }],
+      },
+    });
+    const service = await prisma.service.create({
+      data: {
+        serviceProviderId: provider.id,
+        eventBookingId: existingEventBooking.id,
+      },
+    });
 
     const response = await api
       .delete(`/event-bookings/${existingEventBooking.id}`)
@@ -958,6 +1098,14 @@ describe("event booking routes", { skip: !eventBookingTableExists }, () => {
     });
 
     assert.equal(eventBooking, null);
+
+    const linkedService = await prisma.service.findUnique({
+      where: {
+        id: service.id,
+      },
+    });
+
+    assert.equal(linkedService, null);
   });
 
   it("rejects unauthenticated delete requests", async () => {

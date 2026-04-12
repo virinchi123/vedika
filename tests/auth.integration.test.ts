@@ -1,67 +1,24 @@
 import assert from "node:assert/strict";
-import { after, beforeEach, describe, it } from "node:test";
+import { describe, it } from "node:test";
 
-import request from "supertest";
-
-import { resetAuthRateLimit } from "../src/auth/auth.router.js";
 import { hashPassword } from "../src/auth/password.js";
-import { app } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
+import {
+  api,
+  buildRegistrationPayload,
+  defaultPassword,
+  setupIntegrationTestLifecycle,
+} from "./integration-test-utils.js";
 
-const api = request(app);
-const defaultPassword = "password123";
-let hasValidatedTestDatabase = false;
-
-const buildRegistrationPayload = () => ({
-  emailAddress: " Person@Example.com ",
-  password: defaultPassword,
-  deviceName: "Pixel 9",
-});
-
-const assertSafeTestDatabase = async (): Promise<void> => {
-  if (hasValidatedTestDatabase) {
-    return;
-  }
-
-  if (process.env.NODE_ENV !== "test") {
-    throw new Error("Refusing to run integration test cleanup outside NODE_ENV=test.");
-  }
-
-  const result = await prisma.$queryRaw<Array<{ current_database: string; current_schema: string }>>`
-    SELECT current_database() AS current_database, current_schema() AS current_schema
-  `;
-  const activeDatabase = result[0]?.current_database?.toLowerCase() ?? "";
-  const activeSchema = result[0]?.current_schema?.toLowerCase() ?? "";
-
-  if (!activeDatabase.includes("test") && !activeSchema.includes("test")) {
-    throw new Error(
-      `Refusing to wipe database "${activeDatabase || "unknown"}" on schema "${activeSchema || "unknown"}". Configure a dedicated test database first.`,
-    );
-  }
-
-  hasValidatedTestDatabase = true;
-};
-
-const resetDatabase = async () => {
-  await assertSafeTestDatabase();
-  await prisma.session.deleteMany();
-  await prisma.user.deleteMany();
-};
-
-beforeEach(async () => {
-  resetAuthRateLimit();
-  await resetDatabase();
-});
-
-after(async () => {
-  resetAuthRateLimit();
-  await resetDatabase();
-  await prisma.$disconnect();
-});
+setupIntegrationTestLifecycle();
 
 describe("auth routes", () => {
   it("registers a user and creates a session", async () => {
-    const response = await api.post("/auth/register").send(buildRegistrationPayload());
+    const response = await api.post("/auth/register").send(
+      buildRegistrationPayload({
+        emailAddress: " Person@Example.com ",
+      }),
+    );
 
     assert.equal(response.status, 201);
     assert.equal(response.body.user.emailAddress, "person@example.com");

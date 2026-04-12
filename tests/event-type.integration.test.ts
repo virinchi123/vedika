@@ -1,61 +1,12 @@
 import assert from "node:assert/strict";
-import { after, beforeEach, describe, it } from "node:test";
+import { describe, it } from "node:test";
 
-import request from "supertest";
-
-import { resetAuthRateLimit } from "../src/auth/auth.router.js";
-import { app } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-
-const api = request(app);
-const defaultPassword = "password123";
-let hasValidatedTestDatabase = false;
-
-const buildRegistrationPayload = () => ({
-  emailAddress: "person@example.com",
-  password: defaultPassword,
-  deviceName: "Pixel 9",
-});
-
-const assertSafeTestDatabase = async (): Promise<void> => {
-  if (hasValidatedTestDatabase) {
-    return;
-  }
-
-  if (process.env.NODE_ENV !== "test") {
-    throw new Error("Refusing to run integration test cleanup outside NODE_ENV=test.");
-  }
-
-  const result = await prisma.$queryRaw<Array<{ current_database: string; current_schema: string }>>`
-    SELECT current_database() AS current_database, current_schema() AS current_schema
-  `;
-  const activeDatabase = result[0]?.current_database?.toLowerCase() ?? "";
-  const activeSchema = result[0]?.current_schema?.toLowerCase() ?? "";
-
-  if (!activeDatabase.includes("test") && !activeSchema.includes("test")) {
-    throw new Error(
-      `Refusing to wipe database "${activeDatabase || "unknown"}" on schema "${activeSchema || "unknown"}". Configure a dedicated test database first.`,
-    );
-  }
-
-  hasValidatedTestDatabase = true;
-};
-
-const resetDatabase = async () => {
-  await assertSafeTestDatabase();
-  await prisma.eventType.deleteMany();
-  await prisma.serviceProvider.deleteMany();
-  await prisma.session.deleteMany();
-  await prisma.user.deleteMany();
-};
-
-const registerAndAuthenticate = async (): Promise<string> => {
-  const registration = await api.post("/auth/register").send(buildRegistrationPayload());
-
-  assert.equal(registration.status, 201);
-
-  return registration.body.accessToken as string;
-};
+import {
+  api,
+  registerAndAuthenticate,
+  setupIntegrationTestLifecycle,
+} from "./integration-test-utils.js";
 
 const createEventTypeRecord = async (name: string, createdAt: string) => {
   return prisma.eventType.create({
@@ -66,16 +17,7 @@ const createEventTypeRecord = async (name: string, createdAt: string) => {
   });
 };
 
-beforeEach(async () => {
-  resetAuthRateLimit();
-  await resetDatabase();
-});
-
-after(async () => {
-  resetAuthRateLimit();
-  await resetDatabase();
-  await prisma.$disconnect();
-});
+setupIntegrationTestLifecycle();
 
 describe("event type routes", () => {
   it("lists event types with cursor pagination", async () => {

@@ -5,6 +5,15 @@ import type {
 import { Prisma } from "../generated/prisma/client.js";
 import type { EventBookingMode } from "../generated/prisma/enums.js";
 import { HttpError } from "../auth/http-error.js";
+import {
+  buildCreatedAtDescCursorOrderBy,
+  buildCreatedAtDescCursorWhere,
+  buildCursorPage,
+  getCreatedAtCursor,
+  type CreatedAtCursor,
+  type CursorListResult,
+  type CursorPageParams,
+} from "../lib/listing.js";
 import { prisma } from "../lib/prisma.js";
 
 const eventBookingSelect = {
@@ -46,6 +55,14 @@ export type EventBookingPayload = {
 };
 
 export type EventBookingResponse = EventBookingRecord;
+export type EventBookingListCursor = CreatedAtCursor;
+export type ListEventBookingsInput = CursorPageParams<EventBookingListCursor> & {
+  name: string | null;
+  fromDate: Date | null;
+  toDate: Date | null;
+  phoneNumber: string | null;
+};
+export type ListEventBookingsResponse = CursorListResult<EventBookingResponse>;
 
 const bookingStatusNotFoundError = () => new HttpError(404, "Booking status not found.");
 const eventStatusNotFoundError = () => new HttpError(404, "Event status not found.");
@@ -191,6 +208,83 @@ const findMissingReferenceError = async (
 
 const isForeignKeyError = (error: unknown): boolean => {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003";
+};
+
+export const listEventBookings = async ({
+  limit,
+  cursor,
+  name,
+  fromDate,
+  toDate,
+  phoneNumber,
+}: ListEventBookingsInput): Promise<ListEventBookingsResponse> => {
+  const whereConditions: Prisma.EventBookingWhereInput[] = [];
+  const cursorWhere = buildCreatedAtDescCursorWhere(cursor);
+
+  if (cursorWhere !== undefined) {
+    whereConditions.push(cursorWhere);
+  }
+
+  if (name !== null) {
+    whereConditions.push({
+      customerName: {
+        contains: name,
+        mode: "insensitive",
+      },
+    });
+  }
+
+  if (phoneNumber !== null) {
+    whereConditions.push({
+      OR: [
+        {
+          phoneNumber1: phoneNumber,
+        },
+        {
+          phoneNumber2: phoneNumber,
+        },
+        {
+          phoneNumber3: phoneNumber,
+        },
+      ],
+    });
+  }
+
+  if (fromDate !== null) {
+    whereConditions.push({
+      bookingEnd: {
+        gte: fromDate,
+      },
+    });
+  }
+
+  if (toDate !== null) {
+    whereConditions.push({
+      bookingStart: {
+        lte: toDate,
+      },
+    });
+  }
+
+  const eventBookings = await prisma.eventBooking.findMany({
+    where:
+      whereConditions.length === 0
+        ? undefined
+        : whereConditions.length === 1
+          ? whereConditions[0]
+          : {
+              AND: whereConditions,
+            },
+    orderBy: buildCreatedAtDescCursorOrderBy(),
+    take: limit + 1,
+    select: eventBookingSelect,
+  });
+
+  return buildCursorPage({
+    items: eventBookings,
+    limit,
+    getCursor: getCreatedAtCursor,
+  });
 };
 
 export const createEventBooking = async (

@@ -4,7 +4,12 @@ import {
   ensureObject,
   ensureRequiredString,
 } from "../lib/crud-validation.js";
-import type { EventBookingPayload } from "./event-booking.service.js";
+import { parseCreatedAtCursor, parseCursorPageParams } from "../lib/listing.js";
+import type {
+  EventBookingListCursor,
+  EventBookingPayload,
+  ListEventBookingsInput,
+} from "./event-booking.service.js";
 
 const parseRequiredDateTime = (value: unknown, fieldName: string): Date => {
   const stringValue = ensureRequiredString(value, fieldName);
@@ -54,6 +59,60 @@ const parseOptionalString = (value: unknown, fieldName: string): string | null =
   return normalizedValue === "" ? null : normalizedValue;
 };
 
+const dateOnlyPattern = /^\d{4}-\d{2}-\d{2}$/;
+
+const parseRequiredDateOnly = (value: unknown, fieldName: string): Date => {
+  const stringValue = ensureRequiredString(value, fieldName);
+
+  if (!dateOnlyPattern.test(stringValue)) {
+    throw new HttpError(400, `${fieldName} must be a valid date in YYYY-MM-DD format.`);
+  }
+
+  const [yearString, monthString, dayString] = stringValue.split("-");
+  const year = Number(yearString);
+  const month = Number(monthString);
+  const day = Number(dayString);
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    throw new HttpError(400, `${fieldName} must be a valid date in YYYY-MM-DD format.`);
+  }
+
+  return date;
+};
+
+const parseEventBookingListCursor = (value: string): EventBookingListCursor => {
+  return parseCreatedAtCursor(value);
+};
+
+const startOfUtcDay = (value: Date): Date => {
+  return new Date(Date.UTC(
+    value.getUTCFullYear(),
+    value.getUTCMonth(),
+    value.getUTCDate(),
+    0,
+    0,
+    0,
+    0,
+  ));
+};
+
+const endOfUtcDay = (value: Date): Date => {
+  return new Date(Date.UTC(
+    value.getUTCFullYear(),
+    value.getUTCMonth(),
+    value.getUTCDate(),
+    23,
+    59,
+    59,
+    999,
+  ));
+};
+
 const parseServiceProviderIds = (value: unknown): string[] => {
   if (value === undefined) {
     return [];
@@ -98,6 +157,36 @@ const parseEventBookingPayload = (value: unknown): EventBookingPayload => {
 
 export const parseEventBookingId = (value: unknown): string => {
   return ensureRequiredString(value, "eventBookingId");
+};
+
+export const parseListEventBookingsInput = (value: unknown): ListEventBookingsInput => {
+  const query = ensureObject(value, "query");
+  const pageParams = parseCursorPageParams(value, {
+    parseCursor: parseEventBookingListCursor,
+  });
+
+  const fromDateValue = query.fromDate === undefined
+    ? null
+    : parseRequiredDateOnly(query.fromDate, "fromDate");
+  const toDateValue = query.toDate === undefined
+    ? null
+    : parseRequiredDateOnly(query.toDate, "toDate");
+
+  if (
+    fromDateValue !== null &&
+    toDateValue !== null &&
+    fromDateValue.getTime() > toDateValue.getTime()
+  ) {
+    throw new HttpError(400, "fromDate must be less than or equal to toDate.");
+  }
+
+  return {
+    ...pageParams,
+    name: parseOptionalString(query.name, "name"),
+    fromDate: fromDateValue === null ? null : startOfUtcDay(fromDateValue),
+    toDate: toDateValue === null ? null : endOfUtcDay(toDateValue),
+    phoneNumber: parseOptionalString(query.phoneNumber, "phoneNumber"),
+  };
 };
 
 export const parseCreateEventBookingInput = parseEventBookingPayload;

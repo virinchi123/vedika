@@ -96,6 +96,7 @@ const buildEventBookingPayload = (
 const createEventBookingRecord = async (
   references: Awaited<ReturnType<typeof createReferences>>,
   overrides: Partial<{
+    createdAt: Date;
     mode: EventBookingMode;
     bookingStart: Date;
     bookingEnd: Date;
@@ -140,6 +141,364 @@ const createEventBookingRecord = async (
 setupIntegrationTestLifecycle();
 
 describe("event booking routes", { skip: !eventBookingTableExists }, () => {
+  it("lists event bookings with cursor pagination", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const references = await createReferences();
+    const oldestBooking = await createEventBookingRecord(references, {
+      createdAt: new Date("2026-04-01T00:00:00.000Z"),
+      customerName: "Oldest Booking",
+      phoneNumber1: "9000000001",
+    });
+    const middleBooking = await createEventBookingRecord(references, {
+      createdAt: new Date("2026-04-02T00:00:00.000Z"),
+      customerName: "Middle Booking",
+      phoneNumber1: "9000000002",
+    });
+    const newestBooking = await createEventBookingRecord(references, {
+      createdAt: new Date("2026-04-03T00:00:00.000Z"),
+      customerName: "Newest Booking",
+      phoneNumber1: "9000000003",
+    });
+
+    const firstPageResponse = await api
+      .get("/event-bookings")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .query({ limit: "2" });
+
+    assert.equal(firstPageResponse.status, 200);
+    assert.deepEqual(
+      firstPageResponse.body.eventBookings.map((eventBooking: { id: string }) => eventBooking.id),
+      [newestBooking.id, middleBooking.id],
+    );
+    assert.deepEqual(firstPageResponse.body.pageInfo, {
+      limit: 2,
+      hasNextPage: true,
+      nextCursor: firstPageResponse.body.pageInfo.nextCursor,
+    });
+    assert.ok(firstPageResponse.body.pageInfo.nextCursor);
+
+    const secondPageResponse = await api
+      .get("/event-bookings")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .query({
+        limit: "2",
+        cursor: firstPageResponse.body.pageInfo.nextCursor,
+      });
+
+    assert.equal(secondPageResponse.status, 200);
+    assert.deepEqual(
+      secondPageResponse.body.eventBookings.map((eventBooking: { id: string }) => eventBooking.id),
+      [oldestBooking.id],
+    );
+    assert.deepEqual(secondPageResponse.body.pageInfo, {
+      limit: 2,
+      hasNextPage: false,
+      nextCursor: null,
+    });
+  });
+
+  it("rejects unauthenticated list requests", async () => {
+    const response = await api.get("/event-bookings");
+
+    assert.equal(response.status, 401);
+    assert.equal(response.body.error, "Invalid or missing access token.");
+  });
+
+  it("filters event bookings by case-insensitive customer name substring", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const references = await createReferences();
+    const matchingBooking = await createEventBookingRecord(references, {
+      customerName: "Ananya Rao",
+      phoneNumber1: "9100000001",
+    });
+    await createEventBookingRecord(references, {
+      customerName: "Priya Sharma",
+      phoneNumber1: "9100000002",
+    });
+
+    const response = await api
+      .get("/event-bookings")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .query({ name: "anya" });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(
+      response.body.eventBookings.map((eventBooking: { id: string }) => eventBooking.id),
+      [matchingBooking.id],
+    );
+  });
+
+  it("filters event bookings by phone number across all phone fields", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const references = await createReferences();
+    const phoneNumber1Match = await createEventBookingRecord(references, {
+      customerName: "Primary Phone",
+      phoneNumber1: "8000000001",
+      phoneNumber2: null,
+      phoneNumber3: null,
+    });
+    const phoneNumber2Match = await createEventBookingRecord(references, {
+      customerName: "Secondary Phone",
+      phoneNumber1: "8000000002",
+      phoneNumber2: "8111111111",
+      phoneNumber3: null,
+    });
+    const phoneNumber3Match = await createEventBookingRecord(references, {
+      customerName: "Tertiary Phone",
+      phoneNumber1: "8000000003",
+      phoneNumber2: null,
+      phoneNumber3: "8222222222",
+    });
+    await createEventBookingRecord(references, {
+      customerName: "Different Phone",
+      phoneNumber1: "8333333333",
+      phoneNumber2: null,
+      phoneNumber3: null,
+    });
+
+    const phoneNumber1Response = await api
+      .get("/event-bookings")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .query({ phoneNumber: " 8000000001 " });
+
+    assert.equal(phoneNumber1Response.status, 200);
+    assert.deepEqual(
+      phoneNumber1Response.body.eventBookings.map((eventBooking: { id: string }) => eventBooking.id),
+      [phoneNumber1Match.id],
+    );
+
+    const phoneNumber2Response = await api
+      .get("/event-bookings")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .query({ phoneNumber: "8111111111" });
+
+    assert.equal(phoneNumber2Response.status, 200);
+    assert.deepEqual(
+      phoneNumber2Response.body.eventBookings.map((eventBooking: { id: string }) => eventBooking.id),
+      [phoneNumber2Match.id],
+    );
+
+    const phoneNumber3Response = await api
+      .get("/event-bookings")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .query({ phoneNumber: "8222222222" });
+
+    assert.equal(phoneNumber3Response.status, 200);
+    assert.deepEqual(
+      phoneNumber3Response.body.eventBookings.map((eventBooking: { id: string }) => eventBooking.id),
+      [phoneNumber3Match.id],
+    );
+  });
+
+  it("filters event bookings by overlapping date range", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const references = await createReferences();
+    const insideRange = await createEventBookingRecord(references, {
+      createdAt: new Date("2026-04-02T00:00:00.000Z"),
+      customerName: "Inside Range",
+      phoneNumber1: "7000000001",
+      bookingStart: new Date("2026-04-11T10:00:00.000Z"),
+      bookingEnd: new Date("2026-04-11T12:00:00.000Z"),
+    });
+    const overlapsStartBoundary = await createEventBookingRecord(references, {
+      createdAt: new Date("2026-04-01T00:00:00.000Z"),
+      customerName: "Overlap Start",
+      phoneNumber1: "7000000002",
+      bookingStart: new Date("2026-04-09T23:00:00.000Z"),
+      bookingEnd: new Date("2026-04-10T02:00:00.000Z"),
+    });
+    const overlapsEndBoundary = await createEventBookingRecord(references, {
+      createdAt: new Date("2026-04-03T00:00:00.000Z"),
+      customerName: "Overlap End",
+      phoneNumber1: "7000000003",
+      bookingStart: new Date("2026-04-12T22:00:00.000Z"),
+      bookingEnd: new Date("2026-04-13T02:00:00.000Z"),
+    });
+    await createEventBookingRecord(references, {
+      createdAt: new Date("2026-04-04T00:00:00.000Z"),
+      customerName: "Outside Range",
+      phoneNumber1: "7000000004",
+      bookingStart: new Date("2026-04-14T10:00:00.000Z"),
+      bookingEnd: new Date("2026-04-14T12:00:00.000Z"),
+    });
+
+    const response = await api
+      .get("/event-bookings")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .query({
+        fromDate: "2026-04-10",
+        toDate: "2026-04-12",
+      });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(
+      response.body.eventBookings.map((eventBooking: { id: string }) => eventBooking.id),
+      [overlapsEndBoundary.id, insideRange.id, overlapsStartBoundary.id],
+    );
+  });
+
+  it("filters event bookings when only fromDate is supplied", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const references = await createReferences();
+    const matchingBooking = await createEventBookingRecord(references, {
+      customerName: "Starts Before But Ends After From Date",
+      phoneNumber1: "7100000001",
+      bookingStart: new Date("2026-04-09T20:00:00.000Z"),
+      bookingEnd: new Date("2026-04-10T03:00:00.000Z"),
+    });
+    await createEventBookingRecord(references, {
+      customerName: "Ends Before From Date",
+      phoneNumber1: "7100000002",
+      bookingStart: new Date("2026-04-08T10:00:00.000Z"),
+      bookingEnd: new Date("2026-04-09T23:59:59.000Z"),
+    });
+
+    const response = await api
+      .get("/event-bookings")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .query({ fromDate: "2026-04-10" });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(
+      response.body.eventBookings.map((eventBooking: { id: string }) => eventBooking.id),
+      [matchingBooking.id],
+    );
+  });
+
+  it("filters event bookings when only toDate is supplied", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const references = await createReferences();
+    const matchingBooking = await createEventBookingRecord(references, {
+      customerName: "Starts Before To Date Ends After",
+      phoneNumber1: "7200000001",
+      bookingStart: new Date("2026-04-12T23:59:59.000Z"),
+      bookingEnd: new Date("2026-04-13T03:00:00.000Z"),
+    });
+    await createEventBookingRecord(references, {
+      customerName: "Starts After To Date",
+      phoneNumber1: "7200000002",
+      bookingStart: new Date("2026-04-13T00:00:00.000Z"),
+      bookingEnd: new Date("2026-04-13T02:00:00.000Z"),
+    });
+
+    const response = await api
+      .get("/event-bookings")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .query({ toDate: "2026-04-12" });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(
+      response.body.eventBookings.map((eventBooking: { id: string }) => eventBooking.id),
+      [matchingBooking.id],
+    );
+  });
+
+  it("validates list date filters", async () => {
+    const accessToken = await registerAndAuthenticate();
+
+    const invalidFromDateResponse = await api
+      .get("/event-bookings")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .query({ fromDate: "2026-02-30" });
+
+    assert.equal(invalidFromDateResponse.status, 400);
+    assert.equal(
+      invalidFromDateResponse.body.error,
+      "fromDate must be a valid date in YYYY-MM-DD format.",
+    );
+
+    const invalidToDateResponse = await api
+      .get("/event-bookings")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .query({ toDate: "2026/04/12" });
+
+    assert.equal(invalidToDateResponse.status, 400);
+    assert.equal(
+      invalidToDateResponse.body.error,
+      "toDate must be a valid date in YYYY-MM-DD format.",
+    );
+
+    const reversedRangeResponse = await api
+      .get("/event-bookings")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .query({
+        fromDate: "2026-04-13",
+        toDate: "2026-04-12",
+      });
+
+    assert.equal(reversedRangeResponse.status, 400);
+    assert.equal(
+      reversedRangeResponse.body.error,
+      "fromDate must be less than or equal to toDate.",
+    );
+  });
+
+  it("combines list filters with pagination", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const references = await createReferences();
+    const firstMatch = await createEventBookingRecord(references, {
+      createdAt: new Date("2026-04-03T00:00:00.000Z"),
+      customerName: "Ananya Family Booking 1",
+      phoneNumber1: "6000000000",
+      bookingStart: new Date("2026-04-11T09:00:00.000Z"),
+      bookingEnd: new Date("2026-04-11T10:00:00.000Z"),
+    });
+    const secondMatch = await createEventBookingRecord(references, {
+      createdAt: new Date("2026-04-02T00:00:00.000Z"),
+      customerName: "ANANYA Family Booking 2",
+      phoneNumber1: "6000000000",
+      bookingStart: new Date("2026-04-12T09:00:00.000Z"),
+      bookingEnd: new Date("2026-04-12T10:00:00.000Z"),
+    });
+    await createEventBookingRecord(references, {
+      createdAt: new Date("2026-04-01T00:00:00.000Z"),
+      customerName: "Ananya Wrong Phone",
+      phoneNumber1: "6999999999",
+      bookingStart: new Date("2026-04-12T09:00:00.000Z"),
+      bookingEnd: new Date("2026-04-12T10:00:00.000Z"),
+    });
+
+    const response = await api
+      .get("/event-bookings")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .query({
+        name: "ananya",
+        phoneNumber: "6000000000",
+        fromDate: "2026-04-11",
+        toDate: "2026-04-12",
+        limit: "1",
+      });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(
+      response.body.eventBookings.map((eventBooking: { id: string }) => eventBooking.id),
+      [firstMatch.id],
+    );
+    assert.equal(response.body.pageInfo.limit, 1);
+    assert.equal(response.body.pageInfo.hasNextPage, true);
+    assert.ok(response.body.pageInfo.nextCursor);
+
+    const nextPageResponse = await api
+      .get("/event-bookings")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .query({
+        name: "ananya",
+        phoneNumber: "6000000000",
+        fromDate: "2026-04-11",
+        toDate: "2026-04-12",
+        limit: "1",
+        cursor: response.body.pageInfo.nextCursor,
+      });
+
+    assert.equal(nextPageResponse.status, 200);
+    assert.deepEqual(
+      nextPageResponse.body.eventBookings.map((eventBooking: { id: string }) => eventBooking.id),
+      [secondMatch.id],
+    );
+    assert.equal(nextPageResponse.body.pageInfo.hasNextPage, false);
+    assert.equal(nextPageResponse.body.pageInfo.nextCursor, null);
+  });
+
   it("creates an event booking for an authenticated request", async () => {
     const accessToken = await registerAndAuthenticate();
     const references = await createReferences();

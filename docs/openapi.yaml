@@ -1,0 +1,1748 @@
+openapi: 3.0.3
+info:
+  title: Vedika API
+  version: 1.0.0
+  description: |
+    OpenAPI reference for the Vedika Express API.
+
+    The implementation uses JSON request and response bodies, bearer-token authentication for protected routes,
+    opaque cursor pagination for list endpoints, and full-replacement semantics for PUT operations.
+servers:
+  - url: http://localhost:3000
+    description: Default local development server. The port is configurable at runtime.
+tags:
+  - name: Health
+  - name: Auth
+  - name: Booking Statuses
+  - name: Event Statuses
+  - name: Event Types
+  - name: Service Providers
+  - name: Default Booking Configurations
+  - name: Event Bookings
+  - name: Customer Interactions
+  - name: Followups
+paths:
+  /health:
+    get:
+      tags: [Health]
+      operationId: getHealth
+      summary: Health check
+      description: Returns a liveness payload with the current server timestamp.
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      operationId: registerUser
+      summary: Register a user
+      description: Creates a new user account and immediately issues access and refresh tokens.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthCredentialsRequest'
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '409':
+          $ref: '#/components/responses/ConflictResponse'
+        '429':
+          $ref: '#/components/responses/TooManyRequestsResponse'
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      operationId: loginUser
+      summary: Log in
+      description: Authenticates an existing user and creates a new session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthCredentialsRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '429':
+          $ref: '#/components/responses/TooManyRequestsResponse'
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      operationId: refreshAuthSession
+      summary: Refresh tokens
+      description: Rotates the refresh token for an active session and returns a fresh access token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRefreshRequest'
+      responses:
+        '200':
+          description: Token refresh successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '429':
+          $ref: '#/components/responses/TooManyRequestsResponse'
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logoutUser
+      summary: Log out
+      description: Revokes the session identified by the supplied refresh token. The route is idempotent.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthLogoutRequest'
+      responses:
+        '204':
+          $ref: '#/components/responses/NoContentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      operationId: getAuthenticatedUser
+      summary: Get current user
+      description: Returns the current user resolved from the bearer token.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+
+  /booking-statuses:
+    get:
+      tags: [Booking Statuses]
+      operationId: listBookingStatuses
+      summary: List booking statuses
+      description: Returns booking statuses in descending created-at order using cursor pagination.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          description: Paginated booking statuses
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingStatusListEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+    post:
+      tags: [Booking Statuses]
+      operationId: createBookingStatus
+      summary: Create booking status
+      description: Creates a new booking status.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NameRequest'
+      responses:
+        '201':
+          description: Booking status created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingStatusEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '409':
+          $ref: '#/components/responses/ConflictResponse'
+
+  /booking-statuses/{id}:
+    delete:
+      tags: [Booking Statuses]
+      operationId: deleteBookingStatus
+      summary: Delete booking status
+      description: Deletes a booking status by id.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '204':
+          $ref: '#/components/responses/NoContentResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+
+  /event-statuses:
+    get:
+      tags: [Event Statuses]
+      operationId: listEventStatuses
+      summary: List event statuses
+      description: Returns event statuses in descending created-at order using cursor pagination.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          description: Paginated event statuses
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventStatusListEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+    post:
+      tags: [Event Statuses]
+      operationId: createEventStatus
+      summary: Create event status
+      description: Creates a new event status.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NameRequest'
+      responses:
+        '201':
+          description: Event status created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventStatusEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '409':
+          $ref: '#/components/responses/ConflictResponse'
+
+  /event-statuses/{id}:
+    put:
+      tags: [Event Statuses]
+      operationId: updateEventStatus
+      summary: Replace event status
+      description: Replaces an event status. This is a full update and always requires `name`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NameRequest'
+      responses:
+        '200':
+          description: Event status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventStatusEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+        '409':
+          $ref: '#/components/responses/ConflictResponse'
+    delete:
+      tags: [Event Statuses]
+      operationId: deleteEventStatus
+      summary: Delete event status
+      description: Deletes an event status by id.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '204':
+          $ref: '#/components/responses/NoContentResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+
+  /event-types:
+    get:
+      tags: [Event Types]
+      operationId: listEventTypes
+      summary: List event types
+      description: Returns event types in descending created-at order using cursor pagination.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          description: Paginated event types
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventTypeListEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+    post:
+      tags: [Event Types]
+      operationId: createEventType
+      summary: Create event type
+      description: |
+        Creates a new event type.
+
+        The server also creates a default booking configuration for the event type, but the response only returns the
+        event type itself.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NameRequest'
+      responses:
+        '201':
+          description: Event type created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventTypeEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '409':
+          $ref: '#/components/responses/ConflictResponse'
+
+  /event-types/{id}:
+    put:
+      tags: [Event Types]
+      operationId: updateEventType
+      summary: Replace event type
+      description: Replaces an event type. This is a full update and always requires `name`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NameRequest'
+      responses:
+        '200':
+          description: Event type updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventTypeEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+        '409':
+          $ref: '#/components/responses/ConflictResponse'
+    delete:
+      tags: [Event Types]
+      operationId: deleteEventType
+      summary: Delete event type
+      description: Deletes an event type by id.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '204':
+          $ref: '#/components/responses/NoContentResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+
+  /service-providers:
+    get:
+      tags: [Service Providers]
+      operationId: listServiceProviders
+      summary: List service providers
+      description: Returns service providers in descending created-at order using cursor pagination.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          description: Paginated service providers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceProviderListEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+    post:
+      tags: [Service Providers]
+      operationId: createServiceProvider
+      summary: Create service provider
+      description: Creates a service provider. Email values are normalized to lowercase and blank optional strings become null.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceProviderRequest'
+      responses:
+        '201':
+          description: Service provider created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceProviderEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '409':
+          $ref: '#/components/responses/ConflictResponse'
+
+  /service-providers/{id}:
+    put:
+      tags: [Service Providers]
+      operationId: updateServiceProvider
+      summary: Replace service provider
+      description: Replaces a service provider. `name` is required and blank optional strings become null.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceProviderRequest'
+      responses:
+        '200':
+          description: Service provider updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceProviderEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+        '409':
+          $ref: '#/components/responses/ConflictResponse'
+    delete:
+      tags: [Service Providers]
+      operationId: deleteServiceProvider
+      summary: Delete service provider
+      description: Deletes a service provider by id.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '204':
+          $ref: '#/components/responses/NoContentResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+
+  /default-booking-configurations:
+    get:
+      tags: [Default Booking Configurations]
+      operationId: listDefaultBookingConfigurations
+      summary: List default booking configurations
+      description: |
+        Returns default booking configurations in descending created-at order using cursor pagination.
+
+        `defaultStartTime` is always returned as a time-of-day string in `HH:mm:ss` format.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          description: Paginated default booking configurations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefaultBookingConfigurationListEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+
+  /default-booking-configurations/{id}:
+    put:
+      tags: [Default Booking Configurations]
+      operationId: updateDefaultBookingConfiguration
+      summary: Replace default booking configuration
+      description: |
+        Replaces a default booking configuration.
+
+        `defaultStartTime` accepts `HH:mm` or `HH:mm:ss`, while responses always use `HH:mm:ss`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DefaultBookingConfigurationRequest'
+      responses:
+        '200':
+          description: Default booking configuration updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefaultBookingConfigurationEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+        '409':
+          $ref: '#/components/responses/ConflictResponse'
+
+  /event-bookings:
+    get:
+      tags: [Event Bookings]
+      operationId: listEventBookings
+      summary: List event bookings
+      description: |
+        Returns event bookings in descending created-at order using cursor pagination.
+
+        The `name`, `phoneNumber`, `fromDate`, and `toDate` filters can be combined. Date filtering uses overlap
+        semantics, so any booking touching the requested range is included.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+        - name: name
+          in: query
+          description: Case-insensitive customer-name substring filter.
+          schema:
+            type: string
+        - name: phoneNumber
+          in: query
+          description: Exact phone-number match against any stored phone-number field.
+          schema:
+            type: string
+        - name: fromDate
+          in: query
+          description: Lower date bound in `YYYY-MM-DD` format.
+          schema:
+            type: string
+            format: date
+        - name: toDate
+          in: query
+          description: Upper date bound in `YYYY-MM-DD` format.
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Paginated event bookings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventBookingListEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+    post:
+      tags: [Event Bookings]
+      operationId: createEventBooking
+      summary: Create event booking
+      description: |
+        Creates an event booking.
+
+        `serviceProviderIds` can be supplied on create, but the response does not currently return provider ids.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventBookingRequest'
+      responses:
+        '201':
+          description: Event booking created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventBookingEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+
+  /event-bookings/{id}:
+    put:
+      tags: [Event Bookings]
+      operationId: updateEventBooking
+      summary: Replace event booking
+      description: |
+        Replaces an event booking.
+
+        This is a full update. Omitting `serviceProviderIds` clears all linked providers, and the response still does
+        not echo provider ids back.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventBookingRequest'
+      responses:
+        '200':
+          description: Event booking updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventBookingEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+    delete:
+      tags: [Event Bookings]
+      operationId: deleteEventBooking
+      summary: Delete event booking
+      description: Deletes an event booking by id.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '204':
+          $ref: '#/components/responses/NoContentResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+
+  /customer-interactions:
+    get:
+      tags: [Customer Interactions]
+      operationId: listCustomerInteractions
+      summary: List customer interactions
+      description: |
+        Returns customer interactions in descending created-at order using cursor pagination.
+
+        The list can be filtered by linked event booking, ignored state, or only-unlinked records.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+        - name: eventBookingId
+          in: query
+          description: Only return interactions linked to the given event booking id.
+          schema:
+            type: string
+            minLength: 1
+        - name: ignored
+          in: query
+          description: Filter by ignored state.
+          schema:
+            type: boolean
+        - name: unlinkedOnly
+          in: query
+          description: Only return interactions that are not linked to any event booking.
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Paginated customer interactions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerInteractionListEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+    post:
+      tags: [Customer Interactions]
+      operationId: createCustomerInteraction
+      summary: Create customer interaction
+      description: |
+        Creates a customer interaction.
+
+        Omitted `eventBookingIds` becomes an empty array, and duplicate ids are deduplicated.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerInteractionRequest'
+      responses:
+        '201':
+          description: Customer interaction created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerInteractionEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+
+  /customer-interactions/{id}:
+    get:
+      tags: [Customer Interactions]
+      operationId: getCustomerInteraction
+      summary: Get customer interaction
+      description: Returns a single customer interaction by id.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Customer interaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerInteractionEnvelope'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+    put:
+      tags: [Customer Interactions]
+      operationId: updateCustomerInteraction
+      summary: Replace customer interaction
+      description: |
+        Replaces a customer interaction.
+
+        This route replaces the full `eventBookingIds` set instead of appending to it.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerInteractionRequest'
+      responses:
+        '200':
+          description: Customer interaction updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerInteractionEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+    delete:
+      tags: [Customer Interactions]
+      operationId: deleteCustomerInteraction
+      summary: Delete customer interaction
+      description: Deletes a customer interaction by id.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '204':
+          $ref: '#/components/responses/NoContentResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+
+  /customer-interactions/{id}/event-bookings:
+    patch:
+      tags: [Customer Interactions]
+      operationId: associateCustomerInteractionEventBookings
+      summary: Append event-booking links
+      description: |
+        Associates one or more event bookings with an existing customer interaction.
+
+        Unlike `PUT /customer-interactions/{id}`, this route appends links, preserves existing links, and deduplicates
+        repeated ids.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerInteractionEventBookingsPatchRequest'
+      responses:
+        '200':
+          description: Customer interaction updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerInteractionEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+
+  /customer-interactions/{id}/ignore:
+    patch:
+      tags: [Customer Interactions]
+      operationId: updateCustomerInteractionIgnored
+      summary: Toggle ignored state
+      description: Updates only the `ignored` flag on a customer interaction.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerInteractionIgnoreRequest'
+      responses:
+        '200':
+          description: Customer interaction updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerInteractionEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+
+  /followups:
+    get:
+      tags: [Followups]
+      operationId: listFollowups
+      summary: List followups
+      description: Returns followups in descending created-at order using cursor pagination and exact-match filters.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+        - name: dueDate
+          in: query
+          description: Exact due-date match as an ISO-8601 datetime string.
+          schema:
+            type: string
+            format: date-time
+        - name: type
+          in: query
+          description: Followup type filter.
+          schema:
+            $ref: '#/components/schemas/FollowupType'
+        - name: eventBookingId
+          in: query
+          description: Exact event-booking-id match.
+          schema:
+            type: string
+            minLength: 1
+        - name: serviceProviderId
+          in: query
+          description: Exact service-provider-id match.
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Paginated followups
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FollowupListEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+    post:
+      tags: [Followups]
+      operationId: createFollowup
+      summary: Create followup
+      description: |
+        Creates a followup.
+
+        `BOOKING` followups require `eventBookingId`; `SERVICE` followups require `serviceProviderId`.
+        `customerInteractionId` is optional for both variants.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FollowupRequest'
+      responses:
+        '201':
+          description: Followup created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FollowupEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+
+  /followups/{id}:
+    get:
+      tags: [Followups]
+      operationId: getFollowup
+      summary: Get followup
+      description: Returns a single followup by id.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Followup
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FollowupEnvelope'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+    delete:
+      tags: [Followups]
+      operationId: deleteFollowup
+      summary: Delete followup
+      description: Deletes a followup by id.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '204':
+          $ref: '#/components/responses/NoContentResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    IdParam:
+      name: id
+      in: path
+      required: true
+      description: Resource identifier.
+      schema:
+        type: string
+        minLength: 1
+    LimitParam:
+      name: limit
+      in: query
+      description: Page size. Defaults to 20 and is capped at 100.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    CursorParam:
+      name: cursor
+      in: query
+      description: Opaque pagination cursor from the previous page.
+      schema:
+        type: string
+  responses:
+    NoContentResponse:
+      description: No response body
+    BadRequestResponse:
+      description: Invalid request payload or query parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    UnauthorizedResponse:
+      description: Missing, malformed, expired, or invalid authentication token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFoundResponse:
+      description: Requested resource or related resource was not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ConflictResponse:
+      description: Request conflicts with an existing unique record
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    TooManyRequestsResponse:
+      description: Authentication rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+      example:
+        error: Human-readable message
+
+    Health:
+      type: object
+      required: [status, timestamp]
+      properties:
+        status:
+          type: string
+          example: ok
+        timestamp:
+          type: string
+          format: date-time
+
+    PageInfo:
+      type: object
+      required: [limit, hasNextPage, nextCursor]
+      properties:
+        limit:
+          type: integer
+          minimum: 1
+        hasNextPage:
+          type: boolean
+        nextCursor:
+          type: string
+          nullable: true
+
+    EventBookingMode:
+      type: string
+      enum: [PHONE_IN, WALK_IN]
+
+    CustomerInteractionType:
+      type: string
+      enum: [WALK_IN, PHONE_IN, MISSED_CALL]
+
+    FollowupType:
+      type: string
+      enum: [BOOKING, SERVICE]
+
+    User:
+      type: object
+      required: [id, emailAddress, phoneNumber, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        emailAddress:
+          type: string
+          format: email
+        phoneNumber:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    UserEnvelope:
+      type: object
+      required: [user]
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+
+    AuthCredentialsRequest:
+      type: object
+      required: [emailAddress, password]
+      properties:
+        emailAddress:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        deviceName:
+          type: string
+          nullable: true
+          maxLength: 120
+
+    AuthRefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+          minLength: 1
+        deviceName:
+          type: string
+          nullable: true
+          maxLength: 120
+
+    AuthLogoutRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+          minLength: 1
+
+    AuthResponse:
+      type: object
+      required: [accessToken, refreshToken, user]
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        user:
+          $ref: '#/components/schemas/User'
+
+    NameRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+
+    BookingStatus:
+      type: object
+      required: [id, name, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    BookingStatusEnvelope:
+      type: object
+      required: [bookingStatus]
+      properties:
+        bookingStatus:
+          $ref: '#/components/schemas/BookingStatus'
+
+    BookingStatusListEnvelope:
+      type: object
+      required: [bookingStatuses, pageInfo]
+      properties:
+        bookingStatuses:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookingStatus'
+        pageInfo:
+          $ref: '#/components/schemas/PageInfo'
+
+    EventStatus:
+      type: object
+      required: [id, name, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    EventStatusEnvelope:
+      type: object
+      required: [eventStatus]
+      properties:
+        eventStatus:
+          $ref: '#/components/schemas/EventStatus'
+
+    EventStatusListEnvelope:
+      type: object
+      required: [eventStatuses, pageInfo]
+      properties:
+        eventStatuses:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventStatus'
+        pageInfo:
+          $ref: '#/components/schemas/PageInfo'
+
+    EventType:
+      type: object
+      required: [id, name, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    EventTypeEnvelope:
+      type: object
+      required: [eventType]
+      properties:
+        eventType:
+          $ref: '#/components/schemas/EventType'
+
+    EventTypeListEnvelope:
+      type: object
+      required: [eventTypes, pageInfo]
+      properties:
+        eventTypes:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventType'
+        pageInfo:
+          $ref: '#/components/schemas/PageInfo'
+
+    ServiceProviderRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        phoneNumber:
+          type: string
+          nullable: true
+        email:
+          type: string
+          format: email
+          nullable: true
+
+    ServiceProvider:
+      type: object
+      required: [id, name, phoneNumber, email, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        phoneNumber:
+          type: string
+          nullable: true
+        email:
+          type: string
+          format: email
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ServiceProviderEnvelope:
+      type: object
+      required: [serviceProvider]
+      properties:
+        serviceProvider:
+          $ref: '#/components/schemas/ServiceProvider'
+
+    ServiceProviderListEnvelope:
+      type: object
+      required: [serviceProviders, pageInfo]
+      properties:
+        serviceProviders:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceProvider'
+        pageInfo:
+          $ref: '#/components/schemas/PageInfo'
+
+    DefaultBookingConfigurationRequest:
+      type: object
+      required: [eventTypeId, defaultStartTime, defaultDurationInMinutes]
+      properties:
+        eventTypeId:
+          type: string
+          minLength: 1
+        defaultStartTime:
+          type: string
+          pattern: '^([01]\d|2[0-3]):([0-5]\d)(:([0-5]\d))?$'
+          description: Time of day in `HH:mm` or `HH:mm:ss` format.
+        defaultDurationInMinutes:
+          type: integer
+          minimum: 1
+
+    DefaultBookingConfiguration:
+      type: object
+      required:
+        [id, createdAt, updatedAt, eventTypeId, defaultStartTime, defaultDurationInMinutes]
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        eventTypeId:
+          type: string
+        defaultStartTime:
+          type: string
+          pattern: '^([01]\d|2[0-3]):([0-5]\d):([0-5]\d)$'
+          description: Time of day in `HH:mm:ss` format.
+        defaultDurationInMinutes:
+          type: integer
+
+    DefaultBookingConfigurationEnvelope:
+      type: object
+      required: [defaultBookingConfiguration]
+      properties:
+        defaultBookingConfiguration:
+          $ref: '#/components/schemas/DefaultBookingConfiguration'
+
+    DefaultBookingConfigurationListEnvelope:
+      type: object
+      required: [defaultBookingConfigurations, pageInfo]
+      properties:
+        defaultBookingConfigurations:
+          type: array
+          items:
+            $ref: '#/components/schemas/DefaultBookingConfiguration'
+        pageInfo:
+          $ref: '#/components/schemas/PageInfo'
+
+    EventBookingRequest:
+      type: object
+      required:
+        [
+          mode,
+          bookingStatusId,
+          eventStatusId,
+          eventTypeId,
+          bookingStart,
+          bookingEnd,
+          customerName,
+          phoneNumber1
+        ]
+      properties:
+        mode:
+          $ref: '#/components/schemas/EventBookingMode'
+        bookingStatusId:
+          type: string
+          minLength: 1
+        eventStatusId:
+          type: string
+          minLength: 1
+        eventTypeId:
+          type: string
+          minLength: 1
+        bookingStart:
+          type: string
+          format: date-time
+        bookingEnd:
+          type: string
+          format: date-time
+        muhurat:
+          type: string
+          format: date-time
+          nullable: true
+        customerName:
+          type: string
+          minLength: 1
+        phoneNumber1:
+          type: string
+          minLength: 1
+        phoneNumber2:
+          type: string
+          nullable: true
+        phoneNumber3:
+          type: string
+          nullable: true
+        referredBy:
+          type: string
+          nullable: true
+        serviceProviderIds:
+          type: array
+          description: Optional array of service-provider ids. Omitted or empty means no linked providers.
+          items:
+            type: string
+            minLength: 1
+
+    EventBooking:
+      type: object
+      required:
+        [
+          id,
+          createdAt,
+          updatedAt,
+          mode,
+          bookingStatusId,
+          eventStatusId,
+          eventTypeId,
+          bookingStart,
+          bookingEnd,
+          muhurat,
+          customerName,
+          phoneNumber1,
+          phoneNumber2,
+          phoneNumber3,
+          referredBy
+        ]
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        mode:
+          $ref: '#/components/schemas/EventBookingMode'
+        bookingStatusId:
+          type: string
+        eventStatusId:
+          type: string
+        eventTypeId:
+          type: string
+        bookingStart:
+          type: string
+          format: date-time
+        bookingEnd:
+          type: string
+          format: date-time
+        muhurat:
+          type: string
+          format: date-time
+          nullable: true
+        customerName:
+          type: string
+        phoneNumber1:
+          type: string
+        phoneNumber2:
+          type: string
+          nullable: true
+        phoneNumber3:
+          type: string
+          nullable: true
+        referredBy:
+          type: string
+          nullable: true
+      description: Event-booking responses do not currently include linked service-provider ids.
+
+    EventBookingEnvelope:
+      type: object
+      required: [eventBooking]
+      properties:
+        eventBooking:
+          $ref: '#/components/schemas/EventBooking'
+
+    EventBookingListEnvelope:
+      type: object
+      required: [eventBookings, pageInfo]
+      properties:
+        eventBookings:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventBooking'
+        pageInfo:
+          $ref: '#/components/schemas/PageInfo'
+
+    CustomerInteractionRequest:
+      type: object
+      required: [interactionType, occurredAt]
+      properties:
+        interactionType:
+          $ref: '#/components/schemas/CustomerInteractionType'
+        occurredAt:
+          type: string
+          format: date-time
+        eventBookingIds:
+          type: array
+          description: Optional array of event-booking ids. Omitted becomes an empty array.
+          items:
+            type: string
+            minLength: 1
+
+    CustomerInteractionIgnoreRequest:
+      type: object
+      required: [ignored]
+      properties:
+        ignored:
+          type: boolean
+
+    CustomerInteractionEventBookingsPatchRequest:
+      type: object
+      required: [eventBookingIds]
+      properties:
+        eventBookingIds:
+          type: array
+          description: Event-booking ids to append. Existing links are preserved and duplicates are ignored.
+          items:
+            type: string
+            minLength: 1
+
+    CustomerInteraction:
+      type: object
+      required: [id, createdAt, updatedAt, interactionType, occurredAt, ignored, eventBookingIds]
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        interactionType:
+          $ref: '#/components/schemas/CustomerInteractionType'
+        occurredAt:
+          type: string
+          format: date-time
+        ignored:
+          type: boolean
+        eventBookingIds:
+          type: array
+          items:
+            type: string
+
+    CustomerInteractionEnvelope:
+      type: object
+      required: [customerInteraction]
+      properties:
+        customerInteraction:
+          $ref: '#/components/schemas/CustomerInteraction'
+
+    CustomerInteractionListEnvelope:
+      type: object
+      required: [customerInteractions, pageInfo]
+      properties:
+        customerInteractions:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomerInteraction'
+        pageInfo:
+          $ref: '#/components/schemas/PageInfo'
+
+    FollowupBaseRequest:
+      type: object
+      required: [dueDate, type]
+      properties:
+        dueDate:
+          type: string
+          format: date-time
+        type:
+          $ref: '#/components/schemas/FollowupType'
+        description:
+          type: string
+          nullable: true
+        customerInteractionId:
+          type: string
+          nullable: true
+          minLength: 1
+
+    BookingFollowupRequest:
+      allOf:
+        - $ref: '#/components/schemas/FollowupBaseRequest'
+        - type: object
+          required: [eventBookingId]
+          properties:
+            type:
+              type: string
+              enum: [BOOKING]
+            eventBookingId:
+              type: string
+              minLength: 1
+            serviceProviderId:
+              type: string
+              nullable: true
+              description: Must be omitted or null for booking followups.
+
+    ServiceFollowupRequest:
+      allOf:
+        - $ref: '#/components/schemas/FollowupBaseRequest'
+        - type: object
+          required: [serviceProviderId]
+          properties:
+            type:
+              type: string
+              enum: [SERVICE]
+            serviceProviderId:
+              type: string
+              minLength: 1
+            eventBookingId:
+              type: string
+              nullable: true
+              description: Must be omitted or null for service followups.
+
+    FollowupRequest:
+      oneOf:
+        - $ref: '#/components/schemas/BookingFollowupRequest'
+        - $ref: '#/components/schemas/ServiceFollowupRequest'
+
+    Followup:
+      type: object
+      required:
+        [
+          id,
+          createdAt,
+          updatedAt,
+          dueDate,
+          type,
+          description,
+          eventBookingId,
+          serviceProviderId,
+          customerInteractionId
+        ]
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        dueDate:
+          type: string
+          format: date-time
+        type:
+          $ref: '#/components/schemas/FollowupType'
+        description:
+          type: string
+          nullable: true
+        eventBookingId:
+          type: string
+          nullable: true
+        serviceProviderId:
+          type: string
+          nullable: true
+        customerInteractionId:
+          type: string
+          nullable: true
+
+    FollowupEnvelope:
+      type: object
+      required: [followup]
+      properties:
+        followup:
+          $ref: '#/components/schemas/Followup'
+
+    FollowupListEnvelope:
+      type: object
+      required: [followups, pageInfo]
+      properties:
+        followups:
+          type: array
+          items:
+            $ref: '#/components/schemas/Followup'
+        pageInfo:
+          $ref: '#/components/schemas/PageInfo'

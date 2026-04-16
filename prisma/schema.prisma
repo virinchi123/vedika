@@ -49,6 +49,28 @@ model Session {
   @@index([expiresAt])
 }
 
+model File {
+  id           String   @id @default(uuid())
+  gcsPath      String   @unique
+  extension    String
+  originalName String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  callRecords  CallRecord[]
+}
+
+model CallRecord {
+  id             String   @id @default(uuid())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  callerNumber   String
+  receiverNumber String
+  fileId         String?
+  file           File?    @relation(fields: [fileId], references: [id], onDelete: SetNull)
+
+  @@index([fileId])
+}
+
 model ServiceProvider {
   id            String         @id @default(uuid())
   name          String         @unique

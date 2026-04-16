@@ -17,6 +17,7 @@ tags:
   - name: Event Statuses
   - name: Event Types
   - name: Service Providers
+  - name: Call Records
   - name: Default Booking Configurations
   - name: Event Bookings
   - name: Customer Interactions
@@ -513,6 +514,83 @@ paths:
           $ref: '#/components/responses/NotFoundResponse'
         '409':
           $ref: '#/components/responses/ConflictResponse'
+
+  /call-records:
+    get:
+      tags: [Call Records]
+      operationId: listCallRecords
+      summary: List call records
+      description: Returns call records in descending created-at order using cursor pagination. When `phoneNumber` is supplied, it is normalized to a canonical Indian 10-digit form and matched against both `callerNumber` and `receiverNumber`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+        - name: phoneNumber
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Indian phone number filter matched against caller or receiver after normalization.
+      responses:
+        '200':
+          description: Paginated call records
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallRecordListEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+    post:
+      tags: [Call Records]
+      operationId: createCallRecord
+      summary: Create call record
+      description: Creates a call record. Caller and receiver numbers are normalized to a canonical Indian 10-digit form. `fileId` is optional and must reference an existing file when provided.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CallRecordRequest'
+      responses:
+        '201':
+          description: Call record created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallRecordEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+
+  /call-records/{id}:
+    get:
+      tags: [Call Records]
+      operationId: getCallRecordById
+      summary: Get call record by id
+      description: Returns a single call record by id.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Call record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallRecordEnvelope'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
 
   /services/{id}:
     get:
@@ -1418,6 +1496,59 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ServiceProvider'
+        pageInfo:
+          $ref: '#/components/schemas/PageInfo'
+
+    CallRecordRequest:
+      type: object
+      additionalProperties: false
+      required: [callerNumber, receiverNumber]
+      properties:
+        callerNumber:
+          type: string
+          description: Phone number normalized to a canonical Indian 10-digit form before storage.
+        receiverNumber:
+          type: string
+          description: Phone number normalized to a canonical Indian 10-digit form before storage.
+        fileId:
+          type: string
+          nullable: true
+
+    CallRecord:
+      type: object
+      required: [id, createdAt, updatedAt, callerNumber, receiverNumber, fileId]
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        callerNumber:
+          type: string
+        receiverNumber:
+          type: string
+        fileId:
+          type: string
+          nullable: true
+
+    CallRecordEnvelope:
+      type: object
+      required: [callRecord]
+      properties:
+        callRecord:
+          $ref: '#/components/schemas/CallRecord'
+
+    CallRecordListEnvelope:
+      type: object
+      required: [callRecords, pageInfo]
+      properties:
+        callRecords:
+          type: array
+          items:
+            $ref: '#/components/schemas/CallRecord'
         pageInfo:
           $ref: '#/components/schemas/PageInfo'
 

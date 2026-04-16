@@ -653,6 +653,104 @@ Deletes a service provider by id. The request is rejected if any `Service` rows 
   - `404` service provider not found
   - `409` `Cannot delete service provider while services reference it.`
 
+## Call Records
+
+### GET /call-records
+
+Lists call records using cursor pagination. If `phoneNumber` is supplied, the API normalizes it to a canonical Indian 10-digit form and returns records whose `callerNumber` or `receiverNumber` matches.
+
+- Auth: bearer access token required
+- Query params:
+  - `limit?: integer`
+  - `cursor?: string`
+  - `phoneNumber?: string`
+- Success `200`:
+
+```json
+{
+  "callRecords": [
+    {
+      "id": "uuid",
+      "createdAt": "2026-04-12T10:00:00.000Z",
+      "updatedAt": "2026-04-12T10:00:00.000Z",
+      "callerNumber": "9876543210",
+      "receiverNumber": "9123456780",
+      "fileId": "uuid"
+    }
+  ],
+  "pageInfo": {
+    "limit": 20,
+    "hasNextPage": false,
+    "nextCursor": null
+  }
+}
+```
+
+- Common errors:
+  - `400` invalid `limit`, `cursor`, or `phoneNumber`
+  - `401` missing or invalid bearer token
+
+### GET /call-records/{id}
+
+Returns a call record by id.
+
+- Auth: bearer access token required
+- Path params:
+  - `id: string`
+- Success `200`:
+
+```json
+{
+  "callRecord": {
+    "id": "uuid",
+    "createdAt": "2026-04-12T10:00:00.000Z",
+    "updatedAt": "2026-04-12T10:00:00.000Z",
+    "callerNumber": "9876543210",
+    "receiverNumber": "9123456780",
+    "fileId": "uuid"
+  }
+}
+```
+
+- Common errors:
+  - `401` missing or invalid bearer token
+  - `404` call record not found
+
+### POST /call-records
+
+Creates a call record. `callerNumber` and `receiverNumber` are normalized to a canonical Indian 10-digit form. `fileId` is optional and must reference an existing file when provided.
+
+- Auth: bearer access token required
+- Request body:
+
+```json
+{
+  "callerNumber": "+91 98765 43210",
+  "receiverNumber": "09123456780",
+  "fileId": "uuid"
+}
+```
+
+- Success `201`:
+
+```json
+{
+  "callRecord": {
+    "id": "uuid",
+    "createdAt": "2026-04-12T10:00:00.000Z",
+    "updatedAt": "2026-04-12T10:00:00.000Z",
+    "callerNumber": "9876543210",
+    "receiverNumber": "9123456780",
+    "fileId": "uuid"
+  }
+}
+```
+
+- Common errors:
+  - `400` invalid `callerNumber`, `receiverNumber`, or `fileId`
+  - `401` missing or invalid bearer token
+  - `404` referenced file not found
+
 ## Services
 
 ### GET /services/{id}

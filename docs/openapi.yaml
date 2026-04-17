@@ -20,6 +20,7 @@ tags:
   - name: Call Records
   - name: Calendar Events
   - name: Payments
+  - name: Services
   - name: Default Booking Configurations
   - name: Event Bookings
   - name: Customer Interactions
@@ -936,6 +937,29 @@ paths:
           $ref: '#/components/responses/NotFoundResponse'
 
   /event-bookings/{id}:
+    get:
+      tags: [Event Bookings]
+      operationId: getEventBookingById
+      summary: Get event booking by id
+      description: |
+        Returns a single event booking by id, including linked `serviceProviderIds` and backing `services`.
+
+        `serviceProviderIds` are sorted ascending by id. `services` are sorted ascending by `serviceProviderId`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Event booking detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventBookingDetailEnvelope'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
     put:
       tags: [Event Bookings]
       operationId: updateEventBooking
@@ -943,9 +967,10 @@ paths:
       description: |
         Replaces an event booking.
 
-        This is a full update. Omitting `serviceProviderIds` clears all linked providers, and the response still does
-        not echo provider ids back. The final provider selection is also synced to backing `Service` rows: retained
-        providers keep their existing service rows, removed providers lose them, and newly added providers get new ones.
+        This is a full update. `serviceProviderIds` is required; send an empty array to clear all linked providers.
+        The response still does not echo provider ids back. The final provider selection is also synced to backing
+        `Service` rows: retained providers keep their existing service rows, removed providers lose them, and newly
+        added providers get new ones.
       security:
         - bearerAuth: []
       parameters:
@@ -955,7 +980,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EventBookingRequest'
+              $ref: '#/components/schemas/EventBookingUpdateRequest'
       responses:
         '200':
           description: Event booking updated
@@ -1625,7 +1650,7 @@ components:
           format: float
           minimum: 0
           maximum: 100
-          description: Whole-number percentage commission rate from 0 to 100 inclusive.
+          description: Percentage commission rate from 0 to 100 inclusive. Decimal values are allowed.
 
     ServiceProvider:
       type: object
@@ -1814,32 +1839,33 @@ components:
     ServicePatchRequest:
       type: object
       additionalProperties: false
+      minProperties: 1
       properties:
         contractedAmount:
           type: string
           nullable: true
-          pattern: '^-?\d+(\.\d{1,2})?$'
-          description: Decimal string with up to 2 fractional digits, or null.
+          pattern: '^\d+(\.\d{1,2})?$'
+          description: Non-negative decimal string with up to 2 fractional digits, or null.
         customerPaidAmount:
           type: string
           nullable: true
-          pattern: '^-?\d+(\.\d{1,2})?$'
-          description: Decimal string with up to 2 fractional digits, or null.
+          pattern: '^\d+(\.\d{1,2})?$'
+          description: Non-negative decimal string with up to 2 fractional digits, or null.
         grossCommission:
           type: string
           nullable: true
-          pattern: '^-?\d+(\.\d{1,2})?$'
-          description: Decimal string with up to 2 fractional digits, or null.
+          pattern: '^\d+(\.\d{1,2})?$'
+          description: Non-negative decimal string with up to 2 fractional digits, or null.
         deduction:
           type: string
           nullable: true
-          pattern: '^-?\d+(\.\d{1,2})?$'
-          description: Decimal string with up to 2 fractional digits, or null.
+          pattern: '^\d+(\.\d{1,2})?$'
+          description: Non-negative decimal string with up to 2 fractional digits, or null.
         commissionPaidAmount:
           type: string
           nullable: true
-          pattern: '^-?\d+(\.\d{1,2})?$'
-          description: Decimal string with up to 2 fractional digits, or null.
+          pattern: '^\d+(\.\d{1,2})?$'
+          description: Non-negative decimal string with up to 2 fractional digits, or null.
 
     Service:
       type: object
@@ -1872,23 +1898,23 @@ components:
         contractedAmount:
           type: string
           nullable: true
-          pattern: '^-?\d+(\.\d{2})$'
+          pattern: '^\d+(\.\d{2})$'
         customerPaidAmount:
           type: string
           nullable: true
-          pattern: '^-?\d+(\.\d{2})$'
+          pattern: '^\d+(\.\d{2})$'
         grossCommission:
           type: string
           nullable: true
-          pattern: '^-?\d+(\.\d{2})$'
+          pattern: '^\d+(\.\d{2})$'
         deduction:
           type: string
           nullable: true
-          pattern: '^-?\d+(\.\d{2})$'
+          pattern: '^\d+(\.\d{2})$'
         commissionPaidAmount:
           type: string
           nullable: true
-          pattern: '^-?\d+(\.\d{2})$'
+          pattern: '^\d+(\.\d{2})$'
 
     ServiceEnvelope:
       type: object
@@ -2004,10 +2030,23 @@ components:
           nullable: true
         serviceProviderIds:
           type: array
-          description: Optional array of service-provider ids. Omitted or empty means no linked providers.
+          description: Optional array of service-provider ids on create. Omitted or empty means no linked providers.
           items:
             type: string
             minLength: 1
+
+    EventBookingUpdateRequest:
+      allOf:
+        - $ref: '#/components/schemas/EventBookingRequest'
+        - type: object
+          required: [serviceProviderIds]
+          properties:
+            serviceProviderIds:
+              type: array
+              description: Required on update. Send an empty array to clear all linked providers.
+              items:
+                type: string
+                minLength: 1
 
     EventBooking:
       type: object
@@ -2069,7 +2108,62 @@ components:
         referredBy:
           type: string
           nullable: true
-      description: Event-booking responses do not currently include linked service-provider ids.
+      description: List, create, and update event-booking responses do not currently include linked service-provider ids.
+
+    EventBookingService:
+      type: object
+      required:
+        [
+          id,
+          serviceProviderId,
+          contractedAmount,
+          customerPaidAmount,
+          grossCommission,
+          deduction,
+          commissionPaidAmount
+        ]
+      properties:
+        id:
+          type: string
+        serviceProviderId:
+          type: string
+        contractedAmount:
+          type: string
+          nullable: true
+          pattern: '^\d+(\.\d{2})$'
+        customerPaidAmount:
+          type: string
+          nullable: true
+          pattern: '^\d+(\.\d{2})$'
+        grossCommission:
+          type: string
+          nullable: true
+          pattern: '^\d+(\.\d{2})$'
+        deduction:
+          type: string
+          nullable: true
+          pattern: '^\d+(\.\d{2})$'
+        commissionPaidAmount:
+          type: string
+          nullable: true
+          pattern: '^\d+(\.\d{2})$'
+
+    EventBookingDetail:
+      allOf:
+        - $ref: '#/components/schemas/EventBooking'
+        - type: object
+          required: [serviceProviderIds, services]
+          properties:
+            serviceProviderIds:
+              type: array
+              description: Linked service-provider ids sorted ascending by id.
+              items:
+                type: string
+            services:
+              type: array
+              description: Backing service rows sorted ascending by `serviceProviderId`.
+              items:
+                $ref: '#/components/schemas/EventBookingService'
 
     EventBookingEnvelope:
       type: object
@@ -2077,6 +2171,13 @@ components:
       properties:
         eventBooking:
           $ref: '#/components/schemas/EventBooking'
+
+    EventBookingDetailEnvelope:
+      type: object
+      required: [eventBooking]
+      properties:
+        eventBooking:
+          $ref: '#/components/schemas/EventBookingDetail'
 
     EventBookingListEnvelope:
       type: object

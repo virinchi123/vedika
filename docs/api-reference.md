@@ -1,6 +1,6 @@
 # Vedika API Reference
 
-Vedika exposes `38` JSON endpoints: `1` health check, `5` auth routes, and `32` protected business routes.
+Vedika exposes `49` JSON endpoints: `1` health check, `5` auth routes, and `43` protected business routes.
 
 ## Shared Conventions
 
@@ -30,9 +30,10 @@ Vedika exposes `38` JSON endpoints: `1` health check, `5` auth routes, and `32` 
   - `defaultStartTime` updates accept `HH:mm` or `HH:mm:ss`
 - `PUT` endpoints are full replacements, not partial updates.
 - Blank optional strings are usually normalized to `null`.
-- Omitted relationship arrays behave as empty arrays on create and update for:
-  - `serviceProviderIds` on event bookings
-  - `eventBookingIds` on customer interactions
+- Omitted relationship arrays behave as empty arrays for:
+  - `serviceProviderIds` on event-booking create
+  - `eventBookingIds` on customer-interaction create and update
+- `PUT /event-bookings/{id}` requires `serviceProviderIds`; send `[]` to clear all linked providers.
 
 ## Shared Shapes
 
@@ -63,6 +64,8 @@ Vedika exposes `38` JSON endpoints: `1` health check, `5` auth routes, and `32` 
 - `EventBookingMode`: `PHONE_IN`, `WALK_IN`
 - `CustomerInteractionType`: `WALK_IN`, `PHONE_IN`, `MISSED_CALL`
 - `FollowupType`: `BOOKING`, `SERVICE`
+- `PaymentMode`: `CASH`, `BANK_TRANSFER`, `UPI`
+- `CalendarEventType`: `event_booking`, `followup`
 
 ## Health
 
@@ -551,6 +554,7 @@ Lists service providers using cursor pagination.
       "name": "Acme Services",
       "phoneNumber": "+91 98765 43210",
       "email": "contact@acme.com",
+      "commissionRate": 22.5,
       "createdAt": "2026-04-12T10:00:00.000Z",
       "updatedAt": "2026-04-12T10:00:00.000Z"
     }
@@ -569,7 +573,7 @@ Lists service providers using cursor pagination.
 
 ### POST /service-providers
 
-Creates a service provider. Email addresses are normalized to lowercase, and blank optional strings become `null`.
+Creates a service provider. Email addresses are normalized to lowercase, blank optional strings become `null`, and `commissionRate` accepts any numeric percentage from `0` to `100` inclusive.
 
 - Auth: bearer access token required
 - Request body:
@@ -578,7 +582,8 @@ Creates a service provider. Email addresses are normalized to lowercase, and bla
 {
   "name": "Acme Services",
   "phoneNumber": "+91 98765 43210",
-  "email": "contact@acme.com"
+  "email": "contact@acme.com",
+  "commissionRate": 12.5
 }
 ```
 
@@ -591,6 +596,7 @@ Creates a service provider. Email addresses are normalized to lowercase, and bla
     "name": "Acme Services",
     "phoneNumber": "+91 98765 43210",
     "email": "contact@acme.com",
+    "commissionRate": 12.5,
     "createdAt": "2026-04-12T10:00:00.000Z",
     "updatedAt": "2026-04-12T10:00:00.000Z"
   }
@@ -598,13 +604,13 @@ Creates a service provider. Email addresses are normalized to lowercase, and bla
 ```
 
 - Common errors:
-  - `400` invalid `name`, `phoneNumber`, or `email`
+  - `400` invalid `name`, `phoneNumber`, `email`, or `commissionRate`
   - `401` missing or invalid bearer token
   - `409` duplicate `name` or `email`
 
 ### PUT /service-providers/{id}
 
-Replaces a service provider record. `name` is required; blank optional strings become `null`.
+Replaces a service provider record. `name` and `commissionRate` are required; blank optional strings become `null`.
 
 - Auth: bearer access token required
 - Path params:
@@ -615,7 +621,8 @@ Replaces a service provider record. `name` is required; blank optional strings b
 {
   "name": "Updated Services",
   "phoneNumber": null,
-  "email": "new@example.com"
+  "email": "new@example.com",
+  "commissionRate": 17.5
 }
 ```
 
@@ -628,6 +635,7 @@ Replaces a service provider record. `name` is required; blank optional strings b
     "name": "Updated Services",
     "phoneNumber": null,
     "email": "new@example.com",
+    "commissionRate": 17.5,
     "createdAt": "2026-04-12T10:00:00.000Z",
     "updatedAt": "2026-04-12T10:05:00.000Z"
   }
@@ -635,7 +643,7 @@ Replaces a service provider record. `name` is required; blank optional strings b
 ```
 
 - Common errors:
-  - `400` invalid or missing `name`, or invalid optional fields
+  - `400` invalid or missing `name`, invalid optional fields, or invalid/missing `commissionRate`
   - `401` missing or invalid bearer token
   - `404` service provider not found
   - `409` duplicate `name` or `email`
@@ -1094,6 +1102,55 @@ Lists event bookings using cursor pagination. Filters can be combined, and date 
   - `400` invalid `limit`, `cursor`, `fromDate`, `toDate`, or reversed date range
   - `401` missing or invalid bearer token
 
+### GET /event-bookings/{id}
+
+Returns one event booking by id, including linked `serviceProviderIds` and backing `services`.
+
+- Auth: bearer access token required
+- Path params:
+  - `id: string`
+- Success `200`:
+
+```json
+{
+  "eventBooking": {
+    "id": "uuid",
+    "createdAt": "2026-04-12T10:00:00.000Z",
+    "updatedAt": "2026-04-12T10:00:00.000Z",
+    "mode": "PHONE_IN",
+    "bookingStatusId": "uuid",
+    "eventStatusId": "uuid",
+    "eventTypeId": "uuid",
+    "bookingStart": "2026-04-20T10:00:00.000Z",
+    "bookingEnd": "2026-04-20T12:00:00.000Z",
+    "muhurat": "2026-04-20T09:30:00.000Z",
+    "customerName": "Priya Sharma",
+    "phoneNumber1": "9876543210",
+    "phoneNumber2": null,
+    "phoneNumber3": null,
+    "referredBy": "Cousin",
+    "serviceProviderIds": [
+      "uuid"
+    ],
+    "services": [
+      {
+        "id": "uuid",
+        "serviceProviderId": "uuid",
+        "contractedAmount": "12000.00",
+        "customerPaidAmount": "11800.00",
+        "grossCommission": "1200.00",
+        "deduction": "50.00",
+        "commissionPaidAmount": "1150.00"
+      }
+    ]
+  }
+}
+```
+
+- Common errors:
+  - `401` missing or invalid bearer token
+  - `404` event booking not found
+
 ### POST /event-bookings
 
 Creates an event booking. `serviceProviderIds` can be supplied; each selected provider is linked to the booking and synced to a backing `Service` row. The response currently does not echo provider ids back.
@@ -1152,7 +1209,7 @@ Creates an event booking. `serviceProviderIds` can be supplied; each selected pr
 
 ### PUT /event-bookings/{id}
 
-Replaces an event booking. This is a full update, and omitting `serviceProviderIds` clears all linked providers. The final provider selection is also synced to backing `Service` rows: retained providers keep existing service rows, removed providers lose them, and newly added providers get new ones.
+Replaces an event booking. This is a full update, `serviceProviderIds` is required, and sending an empty array clears all linked providers. The final provider selection is also synced to backing `Service` rows: retained providers keep existing service rows, removed providers lose them, and newly added providers get new ones.
 
 - Auth: bearer access token required
 - Path params:
@@ -1204,7 +1261,7 @@ Replaces an event booking. This is a full update, and omitting `serviceProviderI
 ```
 
 - Common errors:
-  - `400` invalid enum values, invalid datetime strings, or missing required fields
+  - `400` invalid enum values, invalid datetime strings, missing required fields, or missing `serviceProviderIds`
   - `401` missing or invalid bearer token
   - `404` event booking not found, or referenced related records not found
 
@@ -1245,6 +1302,7 @@ Lists customer interactions using cursor pagination. You can filter by linked bo
       "interactionType": "PHONE_IN",
       "occurredAt": "2026-04-19T11:15:00.000Z",
       "ignored": false,
+      "voiceNoteId": null,
       "eventBookingIds": [
         "uuid"
       ]
@@ -1281,6 +1339,7 @@ Returns one customer interaction by id.
     "interactionType": "MISSED_CALL",
     "occurredAt": "2026-04-22T08:00:00.000Z",
     "ignored": false,
+    "voiceNoteId": "uuid",
     "eventBookingIds": [
       "uuid"
     ]
@@ -1294,7 +1353,7 @@ Returns one customer interaction by id.
 
 ### POST /customer-interactions
 
-Creates a customer interaction. Omitted `eventBookingIds` becomes an empty array, and duplicate ids are deduplicated.
+Creates a customer interaction. Omitted `eventBookingIds` becomes an empty array, duplicate ids are deduplicated, and `voiceNote` is optional for `WALK_IN` interactions only.
 
 - Auth: bearer access token required
 - Request body:
@@ -1320,6 +1379,7 @@ Creates a customer interaction. Omitted `eventBookingIds` becomes an empty array
     "interactionType": "PHONE_IN",
     "occurredAt": "2026-04-19T11:15:00.000Z",
     "ignored": false,
+    "voiceNoteId": null,
     "eventBookingIds": [
       "uuid"
     ]
@@ -1328,13 +1388,13 @@ Creates a customer interaction. Omitted `eventBookingIds` becomes an empty array
 ```
 
 - Common errors:
-  - `400` invalid `interactionType`, invalid `occurredAt`, or non-array `eventBookingIds`
+  - `400` invalid `interactionType`, invalid `occurredAt`, invalid `voiceNote`, or non-array `eventBookingIds`
   - `401` missing or invalid bearer token
   - `404` referenced event booking not found
 
 ### PUT /customer-interactions/{id}
 
-Replaces a customer interaction. This route replaces the full `eventBookingIds` set instead of appending to it.
+Replaces a customer interaction. This route replaces the full `eventBookingIds` set instead of appending to it. `voiceNote` is only allowed for `WALK_IN`, omitting or sending `null` preserves the existing voice note, and `clearVoiceNote: true` removes it.
 
 - Auth: bearer access token required
 - Path params:
@@ -1362,6 +1422,7 @@ Replaces a customer interaction. This route replaces the full `eventBookingIds` 
     "interactionType": "MISSED_CALL",
     "occurredAt": "2026-04-21T09:00:00.000Z",
     "ignored": false,
+    "voiceNoteId": null,
     "eventBookingIds": [
       "uuid"
     ]
@@ -1370,7 +1431,7 @@ Replaces a customer interaction. This route replaces the full `eventBookingIds` 
 ```
 
 - Common errors:
-  - `400` invalid `interactionType`, invalid `occurredAt`, or non-array `eventBookingIds`
+  - `400` invalid `interactionType`, invalid `occurredAt`, invalid `voiceNote`, invalid `clearVoiceNote`, or non-array `eventBookingIds`
   - `401` missing or invalid bearer token
   - `404` customer interaction not found, or referenced event booking not found
 
@@ -1414,6 +1475,7 @@ Associates one or more event bookings with an existing interaction. Unlike `PUT`
     "interactionType": "PHONE_IN",
     "occurredAt": "2026-04-19T11:15:00.000Z",
     "ignored": false,
+    "voiceNoteId": null,
     "eventBookingIds": [
       "uuid"
     ]
@@ -1452,6 +1514,7 @@ Toggles the ignored state on a customer interaction. This route only updates the
     "interactionType": "PHONE_IN",
     "occurredAt": "2026-04-19T11:15:00.000Z",
     "ignored": true,
+    "voiceNoteId": null,
     "eventBookingIds": []
   }
 }

@@ -6,16 +6,15 @@ import {prisma} from "../src/lib/prisma.js";
 import {setupIntegrationTestLifecycle} from "./integration-test-utils.js";
 
 const isServiceAmountCheckConstraintError = (error: unknown): boolean => {
-    if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2004"
-    ) {
-        return true;
-    }
-
     return (
-        error instanceof Error &&
-        error.message.includes('Service_commissionAmount_check')
+        (
+            error instanceof Prisma.PrismaClientKnownRequestError &&
+            error.code === "P2004"
+        ) ||
+        (
+            error instanceof Error &&
+            /Service_.*_check/.test(error.message)
+        )
     );
 };
 
@@ -75,7 +74,7 @@ const createReferences = async () => {
 setupIntegrationTestLifecycle();
 
 describe("service model", {skip: !serviceTableExists}, () => {
-    it("creates a service with both amounts", async () => {
+    it("creates a service with all supported financial fields", async () => {
         const {serviceProvider, eventBooking} = await createReferences();
 
         const service = await prisma.service.create({
@@ -83,17 +82,23 @@ describe("service model", {skip: !serviceTableExists}, () => {
                 serviceProviderId: serviceProvider.id,
                 eventBookingId: eventBooking.id,
                 contractedAmount: new Prisma.Decimal("12500.50"),
-                commissionAmount: new Prisma.Decimal("1500.25"),
+                customerPaidAmount: new Prisma.Decimal("12000.25"),
+                grossCommission: new Prisma.Decimal("1500.25"),
+                deduction: new Prisma.Decimal("125.10"),
+                commissionPaidAmount: new Prisma.Decimal("1375.15"),
             },
         });
 
         assert.equal(service.serviceProviderId, serviceProvider.id);
         assert.equal(service.eventBookingId, eventBooking.id);
         assert.equal(service.contractedAmount?.toString(), "12500.5");
-        assert.equal(service.commissionAmount?.toString(), "1500.25");
+        assert.equal(service.customerPaidAmount?.toString(), "12000.25");
+        assert.equal(service.grossCommission?.toString(), "1500.25");
+        assert.equal(service.deduction?.toString(), "125.1");
+        assert.equal(service.commissionPaidAmount?.toString(), "1375.15");
     });
 
-    it("creates a service with only contracted amount", async () => {
+    it("creates a service with only some financial fields", async () => {
         const {serviceProvider, eventBooking} = await createReferences();
 
         const service = await prisma.service.create({
@@ -101,74 +106,39 @@ describe("service model", {skip: !serviceTableExists}, () => {
                 serviceProviderId: serviceProvider.id,
                 eventBookingId: eventBooking.id,
                 contractedAmount: new Prisma.Decimal("9000.00"),
+                customerPaidAmount: new Prisma.Decimal("8750.00"),
             },
         });
 
         assert.equal(service.contractedAmount?.toString(), "9000");
-        assert.equal(service.commissionAmount, null);
+        assert.equal(service.customerPaidAmount?.toString(), "8750");
+        assert.equal(service.grossCommission, null);
+        assert.equal(service.deduction, null);
+        assert.equal(service.commissionPaidAmount, null);
     });
 
-    it("rejects a negative contracted amount", async () => {
-        const {serviceProvider, eventBooking} = await createReferences();
+    for (const fieldName of [
+        "contractedAmount",
+        "customerPaidAmount",
+        "grossCommission",
+        "deduction",
+        "commissionPaidAmount",
+    ] as const) {
+        it(`rejects a negative ${fieldName}`, async () => {
+            const {serviceProvider, eventBooking} = await createReferences();
 
-        await assert.rejects(
-            prisma.service.create({
-                data: {
-                    serviceProviderId: serviceProvider.id,
-                    eventBookingId: eventBooking.id,
-                    contractedAmount: new Prisma.Decimal("-1.00"),
-                },
-            }),
-            isServiceAmountCheckConstraintError,
-        );
-    });
-
-    it("rejects a negative commission amount", async () => {
-        const {serviceProvider, eventBooking} = await createReferences();
-
-        await assert.rejects(
-            prisma.service.create({
-                data: {
-                    serviceProviderId: serviceProvider.id,
-                    eventBookingId: eventBooking.id,
-                    contractedAmount: new Prisma.Decimal("100.00"),
-                    commissionAmount: new Prisma.Decimal("-1.00"),
-                },
-            }),
-            isServiceAmountCheckConstraintError,
-        );
-    });
-
-    it("rejects a commission amount when contracted amount is null", async () => {
-        const {serviceProvider, eventBooking} = await createReferences();
-
-        await assert.rejects(
-            prisma.service.create({
-                data: {
-                    serviceProviderId: serviceProvider.id,
-                    eventBookingId: eventBooking.id,
-                    commissionAmount: new Prisma.Decimal("500.00"),
-                },
-            }),
-            isServiceAmountCheckConstraintError,
-        );
-    });
-
-    it("rejects a commission amount that is not less than contracted amount", async () => {
-        const {serviceProvider, eventBooking} = await createReferences();
-
-        await assert.rejects(
-            prisma.service.create({
-                data: {
-                    serviceProviderId: serviceProvider.id,
-                    eventBookingId: eventBooking.id,
-                    contractedAmount: new Prisma.Decimal("5000.00"),
-                    commissionAmount: new Prisma.Decimal("5000.00"),
-                },
-            }),
-            isServiceAmountCheckConstraintError,
-        );
-    });
+            await assert.rejects(
+                prisma.service.create({
+                    data: {
+                        serviceProviderId: serviceProvider.id,
+                        eventBookingId: eventBooking.id,
+                        [fieldName]: new Prisma.Decimal("-1.00"),
+                    },
+                }),
+                isServiceAmountCheckConstraintError,
+            );
+        });
+    }
 
     it("rejects duplicate service provider and event booking pairs", async () => {
         const {serviceProvider, eventBooking} = await createReferences();

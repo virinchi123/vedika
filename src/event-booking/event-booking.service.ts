@@ -53,7 +53,10 @@ const eventBookingDetailSelect = {
       id: true,
       serviceProviderId: true,
       contractedAmount: true,
-      commissionAmount: true,
+      customerPaidAmount: true,
+      grossCommission: true,
+      deduction: true,
+      commissionPaidAmount: true,
     },
     orderBy: {
       serviceProviderId: "asc",
@@ -91,7 +94,10 @@ export type EventBookingDetailResponse = Omit<
     id: string;
     serviceProviderId: string;
     contractedAmount: string | null;
-    commissionAmount: string | null;
+    customerPaidAmount: string | null;
+    grossCommission: string | null;
+    deduction: string | null;
+    commissionPaidAmount: string | null;
   }>;
 };
 export type EventBookingListCursor = CreatedAtCursor;
@@ -125,7 +131,10 @@ const serializeEventBookingDetail = (
       id: service.id,
       serviceProviderId: service.serviceProviderId,
       contractedAmount: serializeDecimal(service.contractedAmount),
-      commissionAmount: serializeDecimal(service.commissionAmount),
+      customerPaidAmount: serializeDecimal(service.customerPaidAmount),
+      grossCommission: serializeDecimal(service.grossCommission),
+      deduction: serializeDecimal(service.deduction),
+      commissionPaidAmount: serializeDecimal(service.commissionPaidAmount),
     })),
   };
 };
@@ -278,13 +287,19 @@ const buildServiceRows = (
   eventBookingId: string;
   serviceProviderId: string;
   contractedAmount: null;
-  commissionAmount: null;
+  customerPaidAmount: null;
+  grossCommission: null;
+  deduction: null;
+  commissionPaidAmount: null;
 }> => {
   return serviceProviderIds.map((serviceProviderId) => ({
     eventBookingId,
     serviceProviderId,
     contractedAmount: null,
-    commissionAmount: null,
+    customerPaidAmount: null,
+    grossCommission: null,
+    deduction: null,
+    commissionPaidAmount: null,
   }));
 };
 

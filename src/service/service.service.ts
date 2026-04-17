@@ -13,7 +13,10 @@ const serviceSelect = {
   serviceProviderId: true,
   eventBookingId: true,
   contractedAmount: true,
-  commissionAmount: true,
+  customerPaidAmount: true,
+  grossCommission: true,
+  deduction: true,
+  commissionPaidAmount: true,
 } satisfies ServiceSelect;
 
 type ServiceRecord = ServiceGetPayload<{
@@ -22,16 +25,28 @@ type ServiceRecord = ServiceGetPayload<{
 
 export type ServiceResponse = Omit<
   ServiceRecord,
-  "contractedAmount" | "commissionAmount"
+  | "contractedAmount"
+  | "customerPaidAmount"
+  | "grossCommission"
+  | "deduction"
+  | "commissionPaidAmount"
 > & {
   contractedAmount: string | null;
-  commissionAmount: string | null;
+  customerPaidAmount: string | null;
+  grossCommission: string | null;
+  deduction: string | null;
+  commissionPaidAmount: string | null;
 };
 
 export type ServiceUpdatePayload = {
   contractedAmount?: Prisma.Decimal | null;
-  commissionAmount?: Prisma.Decimal | null;
+  customerPaidAmount?: Prisma.Decimal | null;
+  grossCommission?: Prisma.Decimal | null;
+  deduction?: Prisma.Decimal | null;
+  commissionPaidAmount?: Prisma.Decimal | null;
 };
+
+type ServiceAmountKey = keyof ServiceUpdatePayload;
 
 const serviceNotFoundError = () => new HttpError(404, "Service not found.");
 
@@ -43,38 +58,22 @@ const serializeService = (service: ServiceRecord): ServiceResponse => {
   return {
     ...service,
     contractedAmount: serializeDecimal(service.contractedAmount),
-    commissionAmount: serializeDecimal(service.commissionAmount),
+    customerPaidAmount: serializeDecimal(service.customerPaidAmount),
+    grossCommission: serializeDecimal(service.grossCommission),
+    deduction: serializeDecimal(service.deduction),
+    commissionPaidAmount: serializeDecimal(service.commissionPaidAmount),
   };
 };
 
 const validateServiceAmounts = (
-  contractedAmount: Prisma.Decimal | null,
-  commissionAmount: Prisma.Decimal | null,
+  amounts: Record<ServiceAmountKey, Prisma.Decimal | null>,
 ): void => {
-  if (contractedAmount !== null && contractedAmount.lessThan(0)) {
-    throw new HttpError(400, "contractedAmount must be greater than or equal to 0.");
-  }
-
-  if (commissionAmount !== null && commissionAmount.lessThan(0)) {
-    throw new HttpError(400, "commissionAmount must be greater than or equal to 0.");
-  }
-
-  if (commissionAmount !== null && contractedAmount === null) {
-    throw new HttpError(
-      400,
-      "contractedAmount is required when commissionAmount is provided.",
-    );
-  }
-
-  if (
-    contractedAmount !== null &&
-    commissionAmount !== null &&
-    commissionAmount.greaterThanOrEqualTo(contractedAmount)
-  ) {
-    throw new HttpError(
-      400,
-      "commissionAmount must be less than contractedAmount.",
-    );
+  for (const [fieldName, value] of Object.entries(amounts) as Array<
+    [ServiceAmountKey, Prisma.Decimal | null]
+  >) {
+    if (value !== null && value.lessThan(0)) {
+      throw new HttpError(400, `${fieldName} must be greater than or equal to 0.`);
+    }
   }
 };
 
@@ -111,11 +110,26 @@ export const updateService = async (
   const contractedAmount = data.contractedAmount === undefined
     ? existingService.contractedAmount
     : data.contractedAmount;
-  const commissionAmount = data.commissionAmount === undefined
-    ? existingService.commissionAmount
-    : data.commissionAmount;
+  const customerPaidAmount = data.customerPaidAmount === undefined
+    ? existingService.customerPaidAmount
+    : data.customerPaidAmount;
+  const grossCommission = data.grossCommission === undefined
+    ? existingService.grossCommission
+    : data.grossCommission;
+  const deduction = data.deduction === undefined
+    ? existingService.deduction
+    : data.deduction;
+  const commissionPaidAmount = data.commissionPaidAmount === undefined
+    ? existingService.commissionPaidAmount
+    : data.commissionPaidAmount;
 
-  validateServiceAmounts(contractedAmount, commissionAmount);
+  validateServiceAmounts({
+    contractedAmount,
+    customerPaidAmount,
+    grossCommission,
+    deduction,
+    commissionPaidAmount,
+  });
 
   try {
     const service = await prisma.service.update({

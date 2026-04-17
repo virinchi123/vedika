@@ -52,7 +52,7 @@ const createServiceProviderRecord = async (name: string) => {
     data: {
       name,
       email: `${crypto.randomUUID()}@example.com`,
-        commissionRate: 13
+      commissionRate: 13,
     },
   });
 };
@@ -149,7 +149,10 @@ const listServicesForEventBooking = async (eventBookingId: string) => {
       id: true,
       serviceProviderId: true,
       contractedAmount: true,
-      commissionAmount: true,
+      customerPaidAmount: true,
+      grossCommission: true,
+      deduction: true,
+      commissionPaidAmount: true,
     },
     orderBy: {
       serviceProviderId: "asc",
@@ -238,7 +241,10 @@ describe("event booking routes", { skip: !eventBookingTableExists }, () => {
         serviceProviderId: providerOne.id,
         eventBookingId: eventBooking.id,
         contractedAmount: new Prisma.Decimal("12000.00"),
-        commissionAmount: new Prisma.Decimal("1200.00"),
+        customerPaidAmount: new Prisma.Decimal("11800.00"),
+        grossCommission: new Prisma.Decimal("1200.00"),
+        deduction: new Prisma.Decimal("50.00"),
+        commissionPaidAmount: new Prisma.Decimal("1150.00"),
       },
     });
     const secondService = await prisma.service.create({
@@ -246,7 +252,10 @@ describe("event booking routes", { skip: !eventBookingTableExists }, () => {
         serviceProviderId: providerTwo.id,
         eventBookingId: eventBooking.id,
         contractedAmount: null,
-        commissionAmount: null,
+        customerPaidAmount: null,
+        grossCommission: null,
+        deduction: null,
+        commissionPaidAmount: null,
       },
     });
 
@@ -265,13 +274,19 @@ describe("event booking routes", { skip: !eventBookingTableExists }, () => {
         id: firstService.id,
         serviceProviderId: providerOne.id,
         contractedAmount: "12000.00",
-        commissionAmount: "1200.00",
+        customerPaidAmount: "11800.00",
+        grossCommission: "1200.00",
+        deduction: "50.00",
+        commissionPaidAmount: "1150.00",
       },
       {
         id: secondService.id,
         serviceProviderId: providerTwo.id,
         contractedAmount: null,
-        commissionAmount: null,
+        customerPaidAmount: null,
+        grossCommission: null,
+        deduction: null,
+        commissionPaidAmount: null,
       },
     ].sort((left, right) => left.serviceProviderId.localeCompare(right.serviceProviderId)));
   });
@@ -654,16 +669,25 @@ describe("event booking routes", { skip: !eventBookingTableExists }, () => {
     assert.deepEqual(
       storedServices.map((service) => ({
         contractedAmount: service.contractedAmount,
-        commissionAmount: service.commissionAmount,
+        customerPaidAmount: service.customerPaidAmount,
+        grossCommission: service.grossCommission,
+        deduction: service.deduction,
+        commissionPaidAmount: service.commissionPaidAmount,
       })),
       [
         {
           contractedAmount: null,
-          commissionAmount: null,
+          customerPaidAmount: null,
+          grossCommission: null,
+          deduction: null,
+          commissionPaidAmount: null,
         },
         {
           contractedAmount: null,
-          commissionAmount: null,
+          customerPaidAmount: null,
+          grossCommission: null,
+          deduction: null,
+          commissionPaidAmount: null,
         },
       ],
     );
@@ -894,7 +918,10 @@ describe("event booking routes", { skip: !eventBookingTableExists }, () => {
         serviceProviderId: originalProvider.id,
         eventBookingId: existingEventBooking.id,
         contractedAmount: new Prisma.Decimal("5000.00"),
-        commissionAmount: new Prisma.Decimal("500.00"),
+        customerPaidAmount: new Prisma.Decimal("4900.00"),
+        grossCommission: new Prisma.Decimal("500.00"),
+        deduction: new Prisma.Decimal("25.00"),
+        commissionPaidAmount: new Prisma.Decimal("475.00"),
       },
     });
 
@@ -974,16 +1001,25 @@ describe("event booking routes", { skip: !eventBookingTableExists }, () => {
     assert.deepEqual(
       storedServices.map((service) => ({
         contractedAmount: service.contractedAmount,
-        commissionAmount: service.commissionAmount,
+        customerPaidAmount: service.customerPaidAmount,
+        grossCommission: service.grossCommission,
+        deduction: service.deduction,
+        commissionPaidAmount: service.commissionPaidAmount,
       })),
       [
         {
           contractedAmount: null,
-          commissionAmount: null,
+          customerPaidAmount: null,
+          grossCommission: null,
+          deduction: null,
+          commissionPaidAmount: null,
         },
         {
           contractedAmount: null,
-          commissionAmount: null,
+          customerPaidAmount: null,
+          grossCommission: null,
+          deduction: null,
+          commissionPaidAmount: null,
         },
       ],
     );
@@ -1003,7 +1039,10 @@ describe("event booking routes", { skip: !eventBookingTableExists }, () => {
         serviceProviderId: provider.id,
         eventBookingId: existingEventBooking.id,
         contractedAmount: new Prisma.Decimal("12000.00"),
-        commissionAmount: new Prisma.Decimal("1200.00"),
+        customerPaidAmount: new Prisma.Decimal("11800.00"),
+        grossCommission: new Prisma.Decimal("1200.00"),
+        deduction: new Prisma.Decimal("50.00"),
+        commissionPaidAmount: new Prisma.Decimal("1150.00"),
       },
     });
 
@@ -1025,7 +1064,10 @@ describe("event booking routes", { skip: !eventBookingTableExists }, () => {
     assert.equal(storedServices[0]?.id, existingService.id);
     assert.equal(storedServices[0]?.serviceProviderId, provider.id);
     assert.equal(storedServices[0]?.contractedAmount?.toString(), "12000");
-    assert.equal(storedServices[0]?.commissionAmount?.toString(), "1200");
+    assert.equal(storedServices[0]?.customerPaidAmount?.toString(), "11800");
+    assert.equal(storedServices[0]?.grossCommission?.toString(), "1200");
+    assert.equal(storedServices[0]?.deduction?.toString(), "50");
+    assert.equal(storedServices[0]?.commissionPaidAmount?.toString(), "1150");
   });
 
   it("requires serviceProviderIds on update", async () => {

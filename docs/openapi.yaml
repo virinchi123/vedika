@@ -618,9 +618,10 @@ paths:
       operationId: updateService
       summary: Update service amounts
       description: |
-        Updates one or both editable amount fields on a service.
+        Updates one or more editable financial fields on a service.
 
-        Only `contractedAmount` and `commissionAmount` are accepted. Omitted fields are left unchanged.
+        Only `contractedAmount`, `customerPaidAmount`, `grossCommission`, `deduction`, and
+        `commissionPaidAmount` are accepted. Omitted fields are left unchanged.
       security:
         - bearerAuth: []
       parameters:
@@ -1574,7 +1575,22 @@ components:
           nullable: true
           pattern: '^-?\d+(\.\d{1,2})?$'
           description: Decimal string with up to 2 fractional digits, or null.
-        commissionAmount:
+        customerPaidAmount:
+          type: string
+          nullable: true
+          pattern: '^-?\d+(\.\d{1,2})?$'
+          description: Decimal string with up to 2 fractional digits, or null.
+        grossCommission:
+          type: string
+          nullable: true
+          pattern: '^-?\d+(\.\d{1,2})?$'
+          description: Decimal string with up to 2 fractional digits, or null.
+        deduction:
+          type: string
+          nullable: true
+          pattern: '^-?\d+(\.\d{1,2})?$'
+          description: Decimal string with up to 2 fractional digits, or null.
+        commissionPaidAmount:
           type: string
           nullable: true
           pattern: '^-?\d+(\.\d{1,2})?$'
@@ -1590,7 +1606,10 @@ components:
           serviceProviderId,
           eventBookingId,
           contractedAmount,
-          commissionAmount
+          customerPaidAmount,
+          grossCommission,
+          deduction,
+          commissionPaidAmount
         ]
       properties:
         id:
@@ -1609,7 +1628,19 @@ components:
           type: string
           nullable: true
           pattern: '^-?\d+(\.\d{2})$'
-        commissionAmount:
+        customerPaidAmount:
+          type: string
+          nullable: true
+          pattern: '^-?\d+(\.\d{2})$'
+        grossCommission:
+          type: string
+          nullable: true
+          pattern: '^-?\d+(\.\d{2})$'
+        deduction:
+          type: string
+          nullable: true
+          pattern: '^-?\d+(\.\d{2})$'
+        commissionPaidAmount:
           type: string
           nullable: true
           pattern: '^-?\d+(\.\d{2})$'

@@ -42,7 +42,7 @@ const createReferences = async () => {
     data: {
       name: `Service Provider ${crypto.randomUUID()}`,
       email: `${crypto.randomUUID()}@example.com`,
-        commissionRate:12
+      commissionRate: 12,
     },
   });
   const eventBooking = await prisma.eventBooking.create({
@@ -64,12 +64,15 @@ const createReferences = async () => {
   };
 };
 
-const createServiceRecord = async (
-  overrides: Partial<{
-    contractedAmount: Prisma.Decimal | null;
-    commissionAmount: Prisma.Decimal | null;
-  }> = {},
-) => {
+type ServiceAmountOverrides = Partial<{
+  contractedAmount: Prisma.Decimal | null;
+  customerPaidAmount: Prisma.Decimal | null;
+  grossCommission: Prisma.Decimal | null;
+  deduction: Prisma.Decimal | null;
+  commissionPaidAmount: Prisma.Decimal | null;
+}>;
+
+const createServiceRecord = async (overrides: ServiceAmountOverrides = {}) => {
   const references = await createReferences();
 
   const service = await prisma.service.create({
@@ -77,7 +80,10 @@ const createServiceRecord = async (
       serviceProviderId: references.serviceProvider.id,
       eventBookingId: references.eventBooking.id,
       contractedAmount: new Prisma.Decimal("12000.00"),
-      commissionAmount: new Prisma.Decimal("1200.00"),
+      customerPaidAmount: new Prisma.Decimal("11800.00"),
+      grossCommission: new Prisma.Decimal("1200.00"),
+      deduction: new Prisma.Decimal("50.00"),
+      commissionPaidAmount: new Prisma.Decimal("1150.00"),
       ...overrides,
     },
   });
@@ -86,6 +92,23 @@ const createServiceRecord = async (
     service,
     references,
   };
+};
+
+const assertServiceAmounts = (
+  service: Record<string, unknown>,
+  expected: {
+    contractedAmount: string | null;
+    customerPaidAmount: string | null;
+    grossCommission: string | null;
+    deduction: string | null;
+    commissionPaidAmount: string | null;
+  },
+) => {
+  assert.equal(service.contractedAmount, expected.contractedAmount);
+  assert.equal(service.customerPaidAmount, expected.customerPaidAmount);
+  assert.equal(service.grossCommission, expected.grossCommission);
+  assert.equal(service.deduction, expected.deduction);
+  assert.equal(service.commissionPaidAmount, expected.commissionPaidAmount);
 };
 
 setupIntegrationTestLifecycle();
@@ -101,8 +124,14 @@ describe("service api routes", { skip: !serviceTableExists }, () => {
 
     assert.equal(response.status, 200);
     assert.equal(response.body.service.id, service.id);
-    assert.equal(response.body.service.contractedAmount, "12000.00");
-    assert.equal(response.body.service.commissionAmount, "1200.00");
+    assertServiceAmounts(response.body.service, {
+      contractedAmount: "12000.00",
+      customerPaidAmount: "11800.00",
+      grossCommission: "1200.00",
+      deduction: "50.00",
+      commissionPaidAmount: "1150.00",
+    });
+    assert.equal("commissionAmount" in response.body.service, false);
   });
 
   it("returns not found when getting an unknown service", async () => {
@@ -125,39 +154,84 @@ describe("service api routes", { skip: !serviceTableExists }, () => {
     assert.equal(response.body.error, "Invalid or missing access token.");
   });
 
-  it("updates only contracted amount", async () => {
-    const accessToken = await registerAndAuthenticate();
-    const { service } = await createServiceRecord();
-
-    const response = await api
-      .patch(`/services/${service.id}`)
-      .set("Authorization", `Bearer ${accessToken}`)
-      .send({
+  for (const {
+    fieldName,
+    value,
+    expected,
+  } of [
+    {
+      fieldName: "contractedAmount",
+      value: "15000.25",
+      expected: {
         contractedAmount: "15000.25",
-      });
+        customerPaidAmount: "11800.00",
+        grossCommission: "1200.00",
+        deduction: "50.00",
+        commissionPaidAmount: "1150.00",
+      },
+    },
+    {
+      fieldName: "customerPaidAmount",
+      value: "11750.10",
+      expected: {
+        contractedAmount: "12000.00",
+        customerPaidAmount: "11750.10",
+        grossCommission: "1200.00",
+        deduction: "50.00",
+        commissionPaidAmount: "1150.00",
+      },
+    },
+    {
+      fieldName: "grossCommission",
+      value: "1100.10",
+      expected: {
+        contractedAmount: "12000.00",
+        customerPaidAmount: "11800.00",
+        grossCommission: "1100.10",
+        deduction: "50.00",
+        commissionPaidAmount: "1150.00",
+      },
+    },
+    {
+      fieldName: "deduction",
+      value: "75.25",
+      expected: {
+        contractedAmount: "12000.00",
+        customerPaidAmount: "11800.00",
+        grossCommission: "1200.00",
+        deduction: "75.25",
+        commissionPaidAmount: "1150.00",
+      },
+    },
+    {
+      fieldName: "commissionPaidAmount",
+      value: "1124.75",
+      expected: {
+        contractedAmount: "12000.00",
+        customerPaidAmount: "11800.00",
+        grossCommission: "1200.00",
+        deduction: "50.00",
+        commissionPaidAmount: "1124.75",
+      },
+    },
+  ] as const) {
+    it(`updates only ${fieldName}`, async () => {
+      const accessToken = await registerAndAuthenticate();
+      const { service } = await createServiceRecord();
 
-    assert.equal(response.status, 200);
-    assert.equal(response.body.service.contractedAmount, "15000.25");
-    assert.equal(response.body.service.commissionAmount, "1200.00");
-  });
+      const response = await api
+        .patch(`/services/${service.id}`)
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({
+          [fieldName]: value,
+        });
 
-  it("updates only commission amount", async () => {
-    const accessToken = await registerAndAuthenticate();
-    const { service } = await createServiceRecord();
+      assert.equal(response.status, 200);
+      assertServiceAmounts(response.body.service, expected);
+    });
+  }
 
-    const response = await api
-      .patch(`/services/${service.id}`)
-      .set("Authorization", `Bearer ${accessToken}`)
-      .send({
-        commissionAmount: "1100.10",
-      });
-
-    assert.equal(response.status, 200);
-    assert.equal(response.body.service.contractedAmount, "12000.00");
-    assert.equal(response.body.service.commissionAmount, "1100.10");
-  });
-
-  it("updates both amounts together", async () => {
+  it("updates multiple financial fields together", async () => {
     const accessToken = await registerAndAuthenticate();
     const { service } = await createServiceRecord();
 
@@ -166,15 +240,21 @@ describe("service api routes", { skip: !serviceTableExists }, () => {
       .set("Authorization", `Bearer ${accessToken}`)
       .send({
         contractedAmount: "14000.00",
-        commissionAmount: "1000.50",
+        grossCommission: "1000.50",
+        commissionPaidAmount: "960.25",
       });
 
     assert.equal(response.status, 200);
-    assert.equal(response.body.service.contractedAmount, "14000.00");
-    assert.equal(response.body.service.commissionAmount, "1000.50");
+    assertServiceAmounts(response.body.service, {
+      contractedAmount: "14000.00",
+      customerPaidAmount: "11800.00",
+      grossCommission: "1000.50",
+      deduction: "50.00",
+      commissionPaidAmount: "960.25",
+    });
   });
 
-  it("clears one or both amounts with null", async () => {
+  it("clears one or more financial fields with null", async () => {
     const accessToken = await registerAndAuthenticate();
     const { service } = await createServiceRecord();
 
@@ -182,30 +262,46 @@ describe("service api routes", { skip: !serviceTableExists }, () => {
       .patch(`/services/${service.id}`)
       .set("Authorization", `Bearer ${accessToken}`)
       .send({
-        commissionAmount: null,
+        grossCommission: null,
       });
 
     assert.equal(firstResponse.status, 200);
-    assert.equal(firstResponse.body.service.contractedAmount, "12000.00");
-    assert.equal(firstResponse.body.service.commissionAmount, null);
+    assertServiceAmounts(firstResponse.body.service, {
+      contractedAmount: "12000.00",
+      customerPaidAmount: "11800.00",
+      grossCommission: null,
+      deduction: "50.00",
+      commissionPaidAmount: "1150.00",
+    });
 
     const secondResponse = await api
       .patch(`/services/${service.id}`)
       .set("Authorization", `Bearer ${accessToken}`)
       .send({
         contractedAmount: null,
+        customerPaidAmount: null,
+        deduction: null,
+        commissionPaidAmount: null,
       });
 
     assert.equal(secondResponse.status, 200);
-    assert.equal(secondResponse.body.service.contractedAmount, null);
-    assert.equal(secondResponse.body.service.commissionAmount, null);
+    assertServiceAmounts(secondResponse.body.service, {
+      contractedAmount: null,
+      customerPaidAmount: null,
+      grossCommission: null,
+      deduction: null,
+      commissionPaidAmount: null,
+    });
   });
 
   it("preserves omitted fields on patch", async () => {
     const accessToken = await registerAndAuthenticate();
     const { service } = await createServiceRecord({
       contractedAmount: new Prisma.Decimal("10000.00"),
-      commissionAmount: null,
+      customerPaidAmount: null,
+      grossCommission: new Prisma.Decimal("900.00"),
+      deduction: null,
+      commissionPaidAmount: new Prisma.Decimal("850.00"),
     });
 
     const response = await api
@@ -216,8 +312,13 @@ describe("service api routes", { skip: !serviceTableExists }, () => {
       });
 
     assert.equal(response.status, 200);
-    assert.equal(response.body.service.contractedAmount, "11000.00");
-    assert.equal(response.body.service.commissionAmount, null);
+    assertServiceAmounts(response.body.service, {
+      contractedAmount: "11000.00",
+      customerPaidAmount: null,
+      grossCommission: "900.00",
+      deduction: null,
+      commissionPaidAmount: "850.00",
+    });
   });
 
   it("rejects extra fields in the payload", async () => {
@@ -235,7 +336,25 @@ describe("service api routes", { skip: !serviceTableExists }, () => {
     assert.equal(response.status, 400);
     assert.equal(
       response.body.error,
-      "Only contractedAmount and commissionAmount can be updated.",
+      "Only contractedAmount, customerPaidAmount, grossCommission, deduction, and commissionPaidAmount can be updated.",
+    );
+  });
+
+  it("rejects the removed commissionAmount field", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const { service } = await createServiceRecord();
+
+    const response = await api
+      .patch(`/services/${service.id}`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({
+        commissionAmount: "100.00",
+      });
+
+    assert.equal(response.status, 400);
+    assert.equal(
+      response.body.error,
+      "Only contractedAmount, customerPaidAmount, grossCommission, deduction, and commissionPaidAmount can be updated.",
     );
   });
 
@@ -251,68 +370,37 @@ describe("service api routes", { skip: !serviceTableExists }, () => {
     assert.equal(response.status, 400);
     assert.equal(
       response.body.error,
-      "At least one of contractedAmount or commissionAmount must be provided.",
+      "At least one of contractedAmount, customerPaidAmount, grossCommission, deduction, or commissionPaidAmount must be provided.",
     );
   });
 
-  it("rejects a negative contracted amount", async () => {
-    const accessToken = await registerAndAuthenticate();
-    const { service } = await createServiceRecord();
+  for (const fieldName of [
+    "contractedAmount",
+    "customerPaidAmount",
+    "grossCommission",
+    "deduction",
+    "commissionPaidAmount",
+  ] as const) {
+    it(`rejects a negative ${fieldName}`, async () => {
+      const accessToken = await registerAndAuthenticate();
+      const { service } = await createServiceRecord();
 
-    const response = await api
-      .patch(`/services/${service.id}`)
-      .set("Authorization", `Bearer ${accessToken}`)
-      .send({
-        contractedAmount: "-1.00",
-      });
+      const response = await api
+        .patch(`/services/${service.id}`)
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({
+          [fieldName]: "-1.00",
+        });
 
-    assert.equal(response.status, 400);
-    assert.equal(
-      response.body.error,
-      "contractedAmount must be a decimal string with up to 2 decimal places or null.",
-    );
-  });
-
-  it("rejects a negative commission amount", async () => {
-    const accessToken = await registerAndAuthenticate();
-    const { service } = await createServiceRecord();
-
-    const response = await api
-      .patch(`/services/${service.id}`)
-      .set("Authorization", `Bearer ${accessToken}`)
-      .send({
-        commissionAmount: "-1.00",
-      });
-
-    assert.equal(response.status, 400);
-    assert.equal(
-      response.body.error,
-      "commissionAmount must be a decimal string with up to 2 decimal places or null.",
-    );
-  });
-
-  it("rejects commissionAmount without an effective contractedAmount", async () => {
-    const accessToken = await registerAndAuthenticate();
-    const { service } = await createServiceRecord({
-      contractedAmount: null,
-      commissionAmount: null,
+      assert.equal(response.status, 400);
+      assert.equal(
+        response.body.error,
+        `${fieldName} must be greater than or equal to 0.`,
+      );
     });
+  }
 
-    const response = await api
-      .patch(`/services/${service.id}`)
-      .set("Authorization", `Bearer ${accessToken}`)
-      .send({
-        commissionAmount: "200.00",
-      });
-
-    assert.equal(response.status, 400);
-    assert.equal(
-      response.body.error,
-      "contractedAmount is required when commissionAmount is provided.",
-    );
-  });
-
-  it("rejects commissionAmount greater than or equal to contractedAmount", async () => {
+  it("rejects malformed decimal strings", async () => {
     const accessToken = await registerAndAuthenticate();
     const { service } = await createServiceRecord();
 
@@ -320,13 +408,13 @@ describe("service api routes", { skip: !serviceTableExists }, () => {
       .patch(`/services/${service.id}`)
       .set("Authorization", `Bearer ${accessToken}`)
       .send({
-        commissionAmount: "12000.00",
+        grossCommission: "12.345",
       });
 
     assert.equal(response.status, 400);
     assert.equal(
       response.body.error,
-      "commissionAmount must be less than contractedAmount.",
+      "grossCommission must be a decimal string with up to 2 decimal places or null.",
     );
   });
 

@@ -771,7 +771,10 @@ Returns a service record by id.
     "serviceProviderId": "uuid",
     "eventBookingId": "uuid",
     "contractedAmount": "12000.00",
-    "commissionAmount": "1200.00"
+    "customerPaidAmount": "11800.00",
+    "grossCommission": "1200.00",
+    "deduction": "50.00",
+    "commissionPaidAmount": "1150.00"
   }
 }
 ```
@@ -782,7 +785,8 @@ Returns a service record by id.
 
 ### PATCH /services/{id}
 
-Updates one or both editable amount fields on a service. Only `contractedAmount` and `commissionAmount` are accepted; omitted fields are left unchanged.
+Updates one or more editable financial fields on a service. Only `contractedAmount`, `customerPaidAmount`,
+`grossCommission`, `deduction`, and `commissionPaidAmount` are accepted; omitted fields are left unchanged.
 
 - Auth: bearer access token required
 - Path params:
@@ -792,7 +796,8 @@ Updates one or both editable amount fields on a service. Only `contractedAmount`
 ```json
 {
   "contractedAmount": "14000.00",
-  "commissionAmount": "1000.50"
+  "grossCommission": "1000.50",
+  "commissionPaidAmount": "960.25"
 }
 ```
 
@@ -807,13 +812,16 @@ Updates one or both editable amount fields on a service. Only `contractedAmount`
     "serviceProviderId": "uuid",
     "eventBookingId": "uuid",
     "contractedAmount": "14000.00",
-    "commissionAmount": "1000.50"
+    "customerPaidAmount": "11800.00",
+    "grossCommission": "1000.50",
+    "deduction": "50.00",
+    "commissionPaidAmount": "960.25"
   }
 }
 ```
 
 - Common errors:
-  - `400` invalid decimal strings, empty patch payloads, extra fields, or invalid amount relationships
+  - `400` invalid decimal strings, negative amounts, empty patch payloads, or extra fields
   - `401` missing or invalid bearer token
   - `404` service not found
 

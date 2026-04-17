@@ -18,6 +18,7 @@ tags:
   - name: Event Types
   - name: Service Providers
   - name: Call Records
+  - name: Payments
   - name: Default Booking Configurations
   - name: Event Bookings
   - name: Customer Interactions
@@ -587,6 +588,111 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CallRecordEnvelope'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+
+  /payments:
+    get:
+      tags: [Payments]
+      operationId: listPayments
+      summary: List payments
+      description: Returns payments in descending created-at order using cursor pagination. When `serviceId` is supplied, it filters to payments for that exact service.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+        - name: serviceId
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Exact service-id filter.
+      responses:
+        '200':
+          description: Paginated payments
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentListEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+    post:
+      tags: [Payments]
+      operationId: createPayment
+      summary: Create payment
+      description: Creates a payment linked to a service. `paymentProofFileId` is optional and must reference an existing file when provided.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentRequest'
+      responses:
+        '201':
+          description: Payment created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+
+  /payments/{id}:
+    get:
+      tags: [Payments]
+      operationId: getPaymentById
+      summary: Get payment by id
+      description: Returns a single payment by id.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Payment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentEnvelope'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+    put:
+      tags: [Payments]
+      operationId: updatePayment
+      summary: Replace payment
+      description: Replaces a payment using a full replacement payload.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentRequest'
+      responses:
+        '200':
+          description: Payment updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
         '401':
           $ref: '#/components/responses/UnauthorizedResponse'
         '404':
@@ -1270,6 +1376,10 @@ components:
       type: string
       enum: [BOOKING, SERVICE]
 
+    PaymentMode:
+      type: string
+      enum: [CASH, BANK_TRANSFER, UPI]
+
     User:
       type: object
       required: [id, emailAddress, phoneNumber, createdAt, updatedAt]
@@ -1563,6 +1673,71 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CallRecord'
+        pageInfo:
+          $ref: '#/components/schemas/PageInfo'
+
+    PaymentRequest:
+      type: object
+      additionalProperties: false
+      required: [mode, amount, date, serviceId]
+      properties:
+        mode:
+          $ref: '#/components/schemas/PaymentMode'
+        amount:
+          type: string
+          pattern: '^\d+(\.\d{1,2})?$'
+          description: Positive decimal string with up to 2 fractional digits.
+        date:
+          type: string
+          format: date
+          description: Payment date in `YYYY-MM-DD` format.
+        serviceId:
+          type: string
+        paymentProofFileId:
+          type: string
+          nullable: true
+
+    Payment:
+      type: object
+      required: [id, createdAt, updatedAt, mode, amount, date, serviceId, paymentProofFileId]
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        mode:
+          $ref: '#/components/schemas/PaymentMode'
+        amount:
+          type: string
+          pattern: '^\d+(\.\d{2})$'
+        date:
+          type: string
+          format: date
+        serviceId:
+          type: string
+        paymentProofFileId:
+          type: string
+          nullable: true
+
+    PaymentEnvelope:
+      type: object
+      required: [payment]
+      properties:
+        payment:
+          $ref: '#/components/schemas/Payment'
+
+    PaymentListEnvelope:
+      type: object
+      required: [payments, pageInfo]
+      properties:
+        payments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Payment'
         pageInfo:
           $ref: '#/components/schemas/PageInfo'
 

@@ -10,6 +10,7 @@ import { eventStatusRouter } from "./event-status/event-status.router.js";
 import { eventTypeRouter } from "./event-type/event-type.router.js";
 import { followupRouter } from "./followup/followup.router.js";
 import { HttpError, isHttpError } from "./auth/http-error.js";
+import { paymentRouter } from "./payment/payment.router.js";
 import { serviceRouter } from "./service/service.router.js";
 import { serviceProviderRouter } from "./service-provider/service-provider.router.js";
 
@@ -33,6 +34,7 @@ app.use("/default-booking-configurations", defaultBookingConfigurationRouter);
 app.use("/event-statuses", eventStatusRouter);
 app.use("/event-types", eventTypeRouter);
 app.use("/followups", followupRouter);
+app.use("/payments", paymentRouter);
 app.use("/services", serviceRouter);
 app.use("/service-providers", serviceProviderRouter);
 

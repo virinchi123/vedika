@@ -751,6 +751,112 @@ Creates a call record. `callerNumber` and `receiverNumber` are normalized to a c
   - `401` missing or invalid bearer token
   - `404` referenced file not found
 
+## Payments
+
+### GET /payments
+
+Lists payments using cursor pagination.
+
+- Auth: bearer access token required
+- Query params:
+  - `limit?: integer`
+  - `cursor?: string`
+  - `serviceId?: string`
+- Success `200`:
+
+```json
+{
+  "payments": [
+    {
+      "id": "uuid",
+      "createdAt": "2026-04-12T10:00:00.000Z",
+      "updatedAt": "2026-04-12T10:00:00.000Z",
+      "mode": "UPI",
+      "amount": "1200.00",
+      "date": "2026-04-12",
+      "serviceId": "uuid",
+      "paymentProofFileId": "uuid"
+    }
+  ],
+  "pageInfo": {
+    "limit": 20,
+    "hasNextPage": false,
+    "nextCursor": null
+  }
+}
+```
+
+### POST /payments
+
+Creates a payment linked to a service. `paymentProofFileId` is optional.
+
+- Auth: bearer access token required
+- Request body:
+
+```json
+{
+  "mode": "BANK_TRANSFER",
+  "amount": "1200.50",
+  "date": "2026-04-12",
+  "serviceId": "uuid",
+  "paymentProofFileId": "uuid"
+}
+```
+
+- Success `201`:
+
+```json
+{
+  "payment": {
+    "id": "uuid",
+    "createdAt": "2026-04-12T10:00:00.000Z",
+    "updatedAt": "2026-04-12T10:00:00.000Z",
+    "mode": "BANK_TRANSFER",
+    "amount": "1200.50",
+    "date": "2026-04-12",
+    "serviceId": "uuid",
+    "paymentProofFileId": "uuid"
+  }
+}
+```
+
+- Common errors:
+  - `400` invalid mode, amount, date, or payload shape
+  - `401` missing or invalid bearer token
+  - `404` referenced service or file not found
+
+### GET /payments/{id}
+
+Returns a payment by id.
+
+- Auth: bearer access token required
+- Path params:
+  - `id: string`
+
+### PUT /payments/{id}
+
+Replaces a payment using a full replacement payload.
+
+- Auth: bearer access token required
+- Path params:
+  - `id: string`
+- Request body:
+
+```json
+{
+  "mode": "CASH",
+  "amount": "950.25",
+  "date": "2026-04-15",
+  "serviceId": "uuid",
+  "paymentProofFileId": null
+}
+```
+
+- Common errors:
+  - `400` invalid mode, amount, date, or payload shape
+  - `401` missing or invalid bearer token
+  - `404` payment, service, or file not found
+
 ## Services
 
 ### GET /services/{id}

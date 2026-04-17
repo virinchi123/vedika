@@ -24,6 +24,12 @@ enum FollowupType {
   SERVICE
 }
 
+enum PaymentMode {
+  CASH
+  BANK_TRANSFER
+  UPI
+}
+
 model User {
   id           String    @id @default(uuid())
   emailAddress String    @unique
@@ -57,6 +63,7 @@ model File {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   callRecords  CallRecord[]
+  payments     Payment[]
   voiceNotes   VoiceNote[]
 }
 
@@ -159,12 +166,29 @@ model Service {
   grossCommission  Decimal?        @db.Decimal(10, 2)
   deduction        Decimal?        @db.Decimal(10, 2)
   commissionPaidAmount Decimal?     @db.Decimal(10, 2)
+  payments          Payment[]
   serviceProvider   ServiceProvider @relation(fields: [serviceProviderId], references: [id], onDelete: Restrict)
   eventBooking      EventBooking    @relation(fields: [eventBookingId], references: [id], onDelete: Cascade)
 
   @@unique([serviceProviderId, eventBookingId])
   @@index([serviceProviderId])
   @@index([eventBookingId])
+}
+
+model Payment {
+  id                 String      @id @default(uuid())
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  mode               PaymentMode
+  amount             Decimal     @db.Decimal(10, 2)
+  date               DateTime    @db.Date
+  serviceId          String
+  paymentProofFileId String?
+  service            Service     @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  paymentProofFile   File?       @relation(fields: [paymentProofFileId], references: [id], onDelete: SetNull)
+
+  @@index([serviceId])
+  @@index([paymentProofFileId])
 }
 
 model CustomerInteraction {

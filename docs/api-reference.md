@@ -751,6 +751,46 @@ Creates a call record. `callerNumber` and `receiverNumber` are normalized to a c
   - `401` missing or invalid bearer token
   - `404` referenced file not found
 
+## Calendar Events
+
+### GET /calendar-events
+
+Lists merged calendar events for a bounded date range.
+
+- Auth: bearer access token required
+- Query params:
+  - `fromDate: string` required, `YYYY-MM-DD`
+  - `toDate: string` required, `YYYY-MM-DD`
+  - `limit?: integer`
+  - `cursor?: string`
+- Success `200`:
+
+```json
+{
+  "events": [
+    {
+      "date": "2026-04-11T09:30:00.000Z",
+      "type": "event_booking",
+      "objectId": "uuid"
+    },
+    {
+      "date": "2026-04-12T10:00:00.000Z",
+      "type": "followup",
+      "objectId": "uuid"
+    }
+  ],
+  "pageInfo": {
+    "limit": 20,
+    "hasNextPage": false,
+    "nextCursor": null
+  }
+}
+```
+
+- Common errors:
+  - `400` missing or invalid `fromDate` / `toDate`, or `fromDate > toDate`
+  - `401` missing or invalid bearer token
+
 ## Payments
 
 ### GET /payments

@@ -18,6 +18,7 @@ tags:
   - name: Event Types
   - name: Service Providers
   - name: Call Records
+  - name: Calendar Events
   - name: Payments
   - name: Default Booking Configurations
   - name: Event Bookings
@@ -592,6 +593,48 @@ paths:
           $ref: '#/components/responses/UnauthorizedResponse'
         '404':
           $ref: '#/components/responses/NotFoundResponse'
+
+  /calendar-events:
+    get:
+      tags: [Calendar Events]
+      operationId: listCalendarEvents
+      summary: List calendar events
+      description: |
+        Returns a merged, paginated event feed ordered by event date ascending.
+
+        The feed includes followups whose `dueDate` falls inside the requested date range and event bookings whose
+        `muhurat` falls inside the requested date range. Both `fromDate` and `toDate` are required and inclusive
+        across the full UTC day.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+        - name: fromDate
+          in: query
+          required: true
+          description: Lower inclusive date bound in `YYYY-MM-DD` format.
+          schema:
+            type: string
+            format: date
+        - name: toDate
+          in: query
+          required: true
+          description: Upper inclusive date bound in `YYYY-MM-DD` format.
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Paginated calendar events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalendarEventListEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
 
   /payments:
     get:
@@ -1380,6 +1423,10 @@ components:
       type: string
       enum: [CASH, BANK_TRANSFER, UPI]
 
+    CalendarEventType:
+      type: string
+      enum: [event_booking, followup]
+
     User:
       type: object
       required: [id, emailAddress, phoneNumber, createdAt, updatedAt]
@@ -1673,6 +1720,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CallRecord'
+        pageInfo:
+          $ref: '#/components/schemas/PageInfo'
+
+    CalendarEvent:
+      type: object
+      required: [date, type, objectId]
+      properties:
+        date:
+          type: string
+          format: date-time
+        type:
+          $ref: '#/components/schemas/CalendarEventType'
+        objectId:
+          type: string
+
+    CalendarEventListEnvelope:
+      type: object
+      required: [events, pageInfo]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/CalendarEvent'
         pageInfo:
           $ref: '#/components/schemas/PageInfo'
 

@@ -1,14 +1,19 @@
 import { parseOptionalString } from "../auth/auth.validation.js";
 import { HttpError } from "../auth/http-error.js";
 import { CustomerInteractionType } from "../generated/prisma/enums.js";
-import { createCrudValidators, ensureObject } from "../lib/crud-validation.js";
+import {
+  ensureObject,
+  ensureRequiredString,
+} from "../lib/crud-validation.js";
 import { parseCreatedAtCursor, parseCursorPageParams } from "../lib/listing.js";
 import type {
+  CreateCustomerInteractionInput,
   CustomerInteractionEventBookingAssociationInput,
   CustomerInteractionIgnoreInput,
   CustomerInteractionListCursor,
-  CustomerInteractionPayload,
   ListCustomerInteractionsInput,
+  UpdateCustomerInteractionInput,
+  VoiceNoteInput,
 } from "./customer-interaction.service.js";
 
 const parseRequiredDateTime = (value: unknown, fieldName: string): Date => {
@@ -55,16 +60,6 @@ const parseInteractionType = (value: unknown): CustomerInteractionType => {
   return normalizedValue as CustomerInteractionType;
 };
 
-const parseCustomerInteractionPayload = (
-  payload: Record<string, unknown>,
-): CustomerInteractionPayload => {
-  return {
-    interactionType: parseInteractionType(payload.interactionType),
-    occurredAt: parseRequiredDateTime(payload.occurredAt, "occurredAt"),
-    eventBookingIds: parseEventBookingIds(payload.eventBookingIds),
-  };
-};
-
 const parseEventBookingIds = (value: unknown): string[] => {
   if (value === undefined) {
     return [];
@@ -97,6 +92,115 @@ const parseRequiredEventBookingIds = (value: unknown): string[] => {
   }
 
   return parseEventBookingIds(value);
+};
+
+const parseVoiceNoteInput = (value: unknown): VoiceNoteInput => {
+  const payload = ensureObject(value, "voiceNote");
+
+  return {
+    gcsPath: ensureRequiredString(payload.gcsPath, "voiceNote.gcsPath"),
+    extension: ensureRequiredString(payload.extension, "voiceNote.extension"),
+    originalName: parseOptionalString(payload.originalName, {
+      fieldName: "voiceNote.originalName",
+    }),
+  };
+};
+
+const parseCreateVoiceNoteInput = (value: unknown): VoiceNoteInput | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return parseVoiceNoteInput(value);
+};
+
+const parseUpdateVoiceNoteInput = (
+  value: unknown,
+): VoiceNoteInput | null | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  return parseVoiceNoteInput(value);
+};
+
+const parseOptionalBoolean = (value: unknown, fieldName: string): boolean => {
+  if (value === undefined) {
+    return false;
+  }
+
+  if (typeof value !== "boolean") {
+    throw new HttpError(400, `${fieldName} must be a boolean.`);
+  }
+
+  return value;
+};
+
+const ensureVoiceNoteAllowed = (
+  interactionType: CustomerInteractionType,
+  voiceNote: VoiceNoteInput | null | undefined,
+): void => {
+  if (voiceNote !== undefined && voiceNote !== null && interactionType !== "WALK_IN") {
+    throw new HttpError(
+      400,
+      "voiceNote is only allowed for WALK_IN customer interactions.",
+    );
+  }
+};
+
+const parseCreateCustomerInteractionPayload = (
+  payload: Record<string, unknown>,
+): CreateCustomerInteractionInput => {
+  if ("clearVoiceNote" in payload) {
+    throw new HttpError(
+      400,
+      "clearVoiceNote is only allowed when updating a customer interaction.",
+    );
+  }
+
+  const interactionType = parseInteractionType(payload.interactionType);
+  const voiceNote = parseCreateVoiceNoteInput(payload.voiceNote);
+
+  ensureVoiceNoteAllowed(interactionType, voiceNote);
+
+  return {
+    interactionType,
+    occurredAt: parseRequiredDateTime(payload.occurredAt, "occurredAt"),
+    eventBookingIds: parseEventBookingIds(payload.eventBookingIds),
+    voiceNote,
+  };
+};
+
+const parseUpdateCustomerInteractionPayload = (
+  payload: Record<string, unknown>,
+): UpdateCustomerInteractionInput => {
+  const interactionType = parseInteractionType(payload.interactionType);
+  const voiceNote = parseUpdateVoiceNoteInput(payload.voiceNote);
+  const clearVoiceNote = parseOptionalBoolean(
+    payload.clearVoiceNote,
+    "clearVoiceNote",
+  );
+
+  if (clearVoiceNote && voiceNote !== undefined && voiceNote !== null) {
+    throw new HttpError(
+      400,
+      "clearVoiceNote cannot be true when voiceNote is provided.",
+    );
+  }
+
+  ensureVoiceNoteAllowed(interactionType, voiceNote);
+
+  return {
+    interactionType,
+    occurredAt: parseRequiredDateTime(payload.occurredAt, "occurredAt"),
+    eventBookingIds: parseEventBookingIds(payload.eventBookingIds),
+    voiceNote,
+    clearVoiceNote,
+  };
 };
 
 const parseCustomerInteractionListCursor = (
@@ -163,15 +267,6 @@ const parseRequiredBoolean = (value: unknown, fieldName: string): boolean => {
   return value;
 };
 
-const customerInteractionValidators = createCrudValidators<
-  CustomerInteractionPayload,
-  CustomerInteractionListCursor
->({
-  idFieldName: "customerInteractionId",
-  parseCursor: parseCustomerInteractionListCursor,
-  parseCreateBody: parseCustomerInteractionPayload,
-});
-
 export const parseListCustomerInteractionsInput = (
   value: unknown,
 ): ListCustomerInteractionsInput => {
@@ -204,11 +299,22 @@ export const parseListCustomerInteractionsInput = (
   };
 };
 
-export const parseCustomerInteractionId = customerInteractionValidators.parseId;
-export const parseCreateCustomerInteractionInput =
-  customerInteractionValidators.parseCreateInput;
-export const parseUpdateCustomerInteractionInput =
-  customerInteractionValidators.parseUpdateInput;
+export const parseCustomerInteractionId = (value: unknown): string => {
+  return ensureRequiredString(value, "customerInteractionId");
+};
+
+export const parseCreateCustomerInteractionInput = (
+  value: unknown,
+): CreateCustomerInteractionInput => {
+  return parseCreateCustomerInteractionPayload(ensureObject(value, "body"));
+};
+
+export const parseUpdateCustomerInteractionInput = (
+  value: unknown,
+): UpdateCustomerInteractionInput => {
+  return parseUpdateCustomerInteractionPayload(ensureObject(value, "body"));
+};
+
 export const parseIgnoreCustomerInteractionInput = (
   value: unknown,
 ): CustomerInteractionIgnoreInput => {

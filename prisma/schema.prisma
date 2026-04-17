@@ -57,18 +57,22 @@ model File {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   callRecords  CallRecord[]
+  voiceNotes   VoiceNote[]
 }
 
 model CallRecord {
-  id             String   @id @default(uuid())
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  callerNumber   String
-  receiverNumber String
-  fileId         String?
-  file           File?    @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  id                    String               @id @default(uuid())
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  callerNumber          String
+  receiverNumber        String
+  fileId                String?
+  customerInteractionId String?
+  file                  File?                @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  customerInteraction   CustomerInteraction? @relation(fields: [customerInteractionId], references: [id], onDelete: SetNull)
 
   @@index([fileId])
+  @@index([customerInteractionId])
 }
 
 model ServiceProvider {
@@ -166,8 +170,22 @@ model CustomerInteraction {
   interactionType CustomerInteractionType
   occurredAt      DateTime
   ignored         Boolean                 @default(false)
+  callRecords     CallRecord[]
   eventBookings   EventBooking[]
   followups       Followup[]
+  voiceNote       VoiceNote?
+}
+
+model VoiceNote {
+  id                    String              @id @default(uuid())
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  fileId                String
+  customerInteractionId String              @unique
+  file                  File                @relation(fields: [fileId], references: [id], onDelete: Restrict)
+  customerInteraction   CustomerInteraction @relation(fields: [customerInteractionId], references: [id], onDelete: Restrict)
+
+  @@index([fileId])
 }
 
 model Followup {

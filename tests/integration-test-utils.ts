@@ -68,6 +68,18 @@ const deleteFollowupsIfTableExists = async () => {
   }
 };
 
+const deleteVoiceNotesIfTableExists = async () => {
+  try {
+    await prisma.voiceNote.deleteMany();
+  } catch (error) {
+    if (isMissingTableError(error)) {
+      return;
+    }
+
+    throw error;
+  }
+};
+
 const deleteCallRecordsIfTableExists = async () => {
   try {
     await prisma.callRecord.deleteMany();
@@ -130,12 +142,13 @@ const deleteEventBookingsIfTableExists = async () => {
 
 export const resetDatabase = async () => {
   await assertSafeTestDatabase();
+  await deleteVoiceNotesIfTableExists();
+  await deleteFilesIfTableExists();
   await deleteFollowupsIfTableExists();
   await deleteCallRecordsIfTableExists();
   await deleteServicesIfTableExists();
   await deleteCustomerInteractionsIfTableExists();
   await deleteEventBookingsIfTableExists();
-  await deleteFilesIfTableExists();
   await prisma.bookingStatus.deleteMany();
   await prisma.defaultBookingConfiguration.deleteMany();
   await prisma.eventStatus.deleteMany();

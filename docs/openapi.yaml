@@ -887,6 +887,7 @@ paths:
         Creates a customer interaction.
 
         Omitted `eventBookingIds` becomes an empty array, and duplicate ids are deduplicated.
+        `voiceNote` is optional and allowed only when `interactionType` is `WALK_IN`.
       security:
         - bearerAuth: []
       requestBody:
@@ -938,6 +939,9 @@ paths:
         Replaces a customer interaction.
 
         This route replaces the full `eventBookingIds` set instead of appending to it.
+        `voiceNote` is allowed only when `interactionType` is `WALK_IN`.
+        Omitting `voiceNote` preserves the existing voice note, `voiceNote: null` also preserves it,
+        and `clearVoiceNote: true` removes the existing voice note.
       security:
         - bearerAuth: []
       parameters:
@@ -947,7 +951,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CustomerInteractionRequest'
+              $ref: '#/components/schemas/CustomerInteractionUpdateRequest'
       responses:
         '200':
           description: Customer interaction updated
@@ -1815,6 +1819,48 @@ components:
           items:
             type: string
             minLength: 1
+        voiceNote:
+          $ref: '#/components/schemas/CustomerInteractionVoiceNoteRequest'
+
+    CustomerInteractionUpdateRequest:
+      type: object
+      required: [interactionType, occurredAt]
+      properties:
+        interactionType:
+          $ref: '#/components/schemas/CustomerInteractionType'
+        occurredAt:
+          type: string
+          format: date-time
+        eventBookingIds:
+          type: array
+          description: Optional array of event-booking ids. Omitted becomes an empty array.
+          items:
+            type: string
+            minLength: 1
+        voiceNote:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/CustomerInteractionVoiceNoteRequest'
+          description: |
+            Optional walk-in voice note payload. Omitting this field preserves the existing voice note.
+            Passing `null` also preserves the existing voice note.
+        clearVoiceNote:
+          type: boolean
+          description: Removes the existing voice note when `true`.
+
+    CustomerInteractionVoiceNoteRequest:
+      type: object
+      required: [gcsPath, extension]
+      properties:
+        gcsPath:
+          type: string
+          minLength: 1
+        extension:
+          type: string
+          minLength: 1
+        originalName:
+          type: string
+          nullable: true
 
     CustomerInteractionIgnoreRequest:
       type: object
@@ -1836,7 +1882,7 @@ components:
 
     CustomerInteraction:
       type: object
-      required: [id, createdAt, updatedAt, interactionType, occurredAt, ignored, eventBookingIds]
+      required: [id, createdAt, updatedAt, interactionType, occurredAt, ignored, eventBookingIds, voiceNoteId]
       properties:
         id:
           type: string
@@ -1857,6 +1903,9 @@ components:
           type: array
           items:
             type: string
+        voiceNoteId:
+          type: string
+          nullable: true
 
     CustomerInteractionEnvelope:
       type: object

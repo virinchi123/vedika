@@ -8,10 +8,15 @@ import {
   setupIntegrationTestLifecycle,
 } from "./integration-test-utils.js";
 
-const createServiceProviderRecord = async (name: string, createdAt: string) => {
+const createServiceProviderRecord = async (
+  name: string,
+  createdAt: string,
+  commissionRate = 15,
+) => {
   return prisma.serviceProvider.create({
     data: {
       name,
+      commissionRate,
       createdAt: new Date(createdAt),
     },
   });
@@ -143,12 +148,14 @@ describe("service provider routes", () => {
         name: "Acme Services",
         phoneNumber: " +91 98765 43210 ",
         email: " CONTACT@ACME.COM ",
+        commissionRate: 12.5,
       });
 
     assert.equal(response.status, 201);
     assert.equal(response.body.serviceProvider.name, "Acme Services");
     assert.equal(response.body.serviceProvider.phoneNumber, "+91 98765 43210");
     assert.equal(response.body.serviceProvider.email, "contact@acme.com");
+    assert.equal(response.body.serviceProvider.commissionRate, 12.5);
 
     const serviceProvider = await prisma.serviceProvider.findUnique({
       where: {
@@ -158,11 +165,13 @@ describe("service provider routes", () => {
 
     assert.ok(serviceProvider);
     assert.equal(serviceProvider.name, "Acme Services");
+    assert.equal(serviceProvider.commissionRate, 12.5);
   });
 
   it("rejects unauthenticated create requests", async () => {
     const response = await api.post("/service-providers").send({
       name: "Acme Services",
+      commissionRate: 10,
     });
 
     assert.equal(response.status, 401);
@@ -176,6 +185,7 @@ describe("service provider routes", () => {
         name: "Acme Services",
         phoneNumber: "1111111111",
         email: "old@example.com",
+        commissionRate: 10,
       },
     });
 
@@ -186,12 +196,14 @@ describe("service provider routes", () => {
         name: "Updated Services",
         phoneNumber: "",
         email: "new@example.com",
+        commissionRate: 17.5,
       });
 
     assert.equal(response.status, 200);
     assert.equal(response.body.serviceProvider.name, "Updated Services");
     assert.equal(response.body.serviceProvider.phoneNumber, null);
     assert.equal(response.body.serviceProvider.email, "new@example.com");
+    assert.equal(response.body.serviceProvider.commissionRate, 17.5);
 
     const updatedServiceProvider = await prisma.serviceProvider.findUnique({
       where: {
@@ -203,6 +215,7 @@ describe("service provider routes", () => {
     assert.equal(updatedServiceProvider.name, "Updated Services");
     assert.equal(updatedServiceProvider.phoneNumber, null);
     assert.equal(updatedServiceProvider.email, "new@example.com");
+    assert.equal(updatedServiceProvider.commissionRate, 17.5);
   });
 
   it("rejects duplicate names", async () => {
@@ -210,6 +223,7 @@ describe("service provider routes", () => {
     await prisma.serviceProvider.create({
       data: {
         name: "Acme Services",
+        commissionRate: 10,
       },
     });
 
@@ -219,6 +233,7 @@ describe("service provider routes", () => {
       .send({
         name: "Acme Services",
         email: "different@example.com",
+        commissionRate: 20,
       });
 
     assert.equal(response.status, 409);
@@ -231,6 +246,7 @@ describe("service provider routes", () => {
       data: {
         name: "Acme Services",
         email: "contact@example.com",
+        commissionRate: 10,
       },
     });
 
@@ -240,6 +256,7 @@ describe("service provider routes", () => {
       .send({
         name: "Updated Services",
         email: "contact@example.com",
+        commissionRate: 20,
       });
 
     assert.equal(response.status, 409);
@@ -251,6 +268,7 @@ describe("service provider routes", () => {
     const existingServiceProvider = await prisma.serviceProvider.create({
       data: {
         name: "Acme Services",
+        commissionRate: 10,
       },
     });
 
@@ -259,6 +277,7 @@ describe("service provider routes", () => {
       .set("Authorization", `Bearer ${accessToken}`)
       .send({
         email: "new@example.com",
+        commissionRate: 20,
       });
 
     assert.equal(response.status, 400);
@@ -270,6 +289,7 @@ describe("service provider routes", () => {
     const existingServiceProvider = await prisma.serviceProvider.create({
       data: {
         name: "Acme Services",
+        commissionRate: 10,
       },
     });
 
@@ -294,6 +314,7 @@ describe("service provider routes", () => {
     const existingServiceProvider = await prisma.serviceProvider.create({
       data: {
         name: "Acme Services",
+        commissionRate: 10,
       },
     });
     const eventBooking = await prisma.eventBooking.create({
@@ -335,5 +356,105 @@ describe("service provider routes", () => {
     });
 
     assert.ok(serviceProvider);
+  });
+
+  it("includes commissionRate in list responses", async () => {
+    const accessToken = await registerAndAuthenticate();
+    await createServiceProviderRecord("Oldest Services", "2026-04-10T10:00:00.000Z", 5);
+    const newestServiceProvider = await createServiceProviderRecord(
+      "Newest Services",
+      "2026-04-12T10:00:00.000Z",
+      22.5,
+    );
+
+    const response = await api
+      .get("/service-providers")
+      .query({
+        limit: "2",
+      })
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.serviceProviders[0].id, newestServiceProvider.id);
+    assert.equal(response.body.serviceProviders[0].commissionRate, 22.5);
+  });
+
+  it("rejects missing commissionRate on create", async () => {
+    const accessToken = await registerAndAuthenticate();
+
+    const response = await api
+      .post("/service-providers")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({
+        name: "Acme Services",
+      });
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.error, "commissionRate must be a number.");
+  });
+
+  it("rejects missing commissionRate on update", async () => {
+    const accessToken = await registerAndAuthenticate();
+    const existingServiceProvider = await prisma.serviceProvider.create({
+      data: {
+        name: "Acme Services",
+        commissionRate: 10,
+      },
+    });
+
+    const response = await api
+      .put(`/service-providers/${existingServiceProvider.id}`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({
+        name: "Updated Services",
+      });
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.error, "commissionRate must be a number.");
+  });
+
+  it("rejects non-numeric commissionRate values", async () => {
+    const accessToken = await registerAndAuthenticate();
+
+    const response = await api
+      .post("/service-providers")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({
+        name: "Acme Services",
+        commissionRate: "15",
+      });
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.error, "commissionRate must be a number.");
+  });
+
+  it("rejects commissionRate values below 0", async () => {
+    const accessToken = await registerAndAuthenticate();
+
+    const response = await api
+      .post("/service-providers")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({
+        name: "Acme Services",
+        commissionRate: -1,
+      });
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.error, "commissionRate must be between 0 and 100.");
+  });
+
+  it("rejects commissionRate values above 100", async () => {
+    const accessToken = await registerAndAuthenticate();
+
+    const response = await api
+      .post("/service-providers")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({
+        name: "Acme Services",
+        commissionRate: 101,
+      });
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.error, "commissionRate must be between 0 and 100.");
   });
 });

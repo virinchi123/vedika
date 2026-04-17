@@ -42,6 +42,7 @@ const createReferences = async () => {
     data: {
       name: `Service Provider ${crypto.randomUUID()}`,
       email: `${crypto.randomUUID()}@example.com`,
+        commissionRate:13
     },
   });
   const eventBooking = await prisma.eventBooking.create({

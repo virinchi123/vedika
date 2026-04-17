@@ -17,6 +17,7 @@ const serviceProviderSelect = {
   name: true,
   phoneNumber: true,
   email: true,
+  commissionRate: true,
   createdAt: true,
   updatedAt: true,
 } satisfies ServiceProviderSelect;
@@ -25,6 +26,7 @@ export type ServiceProviderPayload = {
   name: string;
   phoneNumber: string | null;
   email: string | null;
+  commissionRate: number;
 };
 
 export type ServiceProviderListCursor = CreatedAtCursor;

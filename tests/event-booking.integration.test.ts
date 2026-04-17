@@ -52,6 +52,7 @@ const createServiceProviderRecord = async (name: string) => {
     data: {
       name,
       email: `${crypto.randomUUID()}@example.com`,
+        commissionRate: 13
     },
   });
 };

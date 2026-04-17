@@ -76,15 +76,16 @@ model CallRecord {
 }
 
 model ServiceProvider {
-  id            String         @id @default(uuid())
-  name          String         @unique
-  phoneNumber   String?
-  email         String?        @unique
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  eventBookings EventBooking[]
-  followups     Followup[]
-  services      Service[]
+  id             String         @id @default(uuid())
+  name           String         @unique
+  phoneNumber    String?
+  email          String?        @unique
+  commissionRate Float
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  eventBookings  EventBooking[]
+  followups      Followup[]
+  services       Service[]
 }
 
 model EventType {

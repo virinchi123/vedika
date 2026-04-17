@@ -10,6 +10,18 @@ import type {
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const parseRequiredCommissionRate = (value: unknown): number => {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    throw new HttpError(400, "commissionRate must be a number.");
+  }
+
+  if (value < 0 || value > 100) {
+    throw new HttpError(400, "commissionRate must be between 0 and 100.");
+  }
+
+  return value;
+};
+
 const parseServiceProviderPayload = (payload: Record<string, unknown>) => {
   return {
     name: ensureRequiredString(payload.name, "name"),
@@ -18,6 +30,7 @@ const parseServiceProviderPayload = (payload: Record<string, unknown>) => {
       maxLength: 40,
     }),
     email: parseOptionalEmail(payload.email),
+    commissionRate: parseRequiredCommissionRate(payload.commissionRate),
   };
 };
 

@@ -1450,7 +1450,7 @@ components:
 
     ServiceProviderRequest:
       type: object
-      required: [name]
+      required: [name, commissionRate]
       properties:
         name:
           type: string
@@ -1462,10 +1462,16 @@ components:
           type: string
           format: email
           nullable: true
+        commissionRate:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          description: Whole-number percentage commission rate from 0 to 100 inclusive.
 
     ServiceProvider:
       type: object
-      required: [id, name, phoneNumber, email, createdAt, updatedAt]
+      required: [id, name, phoneNumber, email, commissionRate, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -1478,6 +1484,9 @@ components:
           type: string
           format: email
           nullable: true
+        commissionRate:
+          type: number
+          format: float
         createdAt:
           type: string
           format: date-time

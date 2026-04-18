@@ -1546,12 +1546,22 @@ components:
 
     AuthResponse:
       type: object
-      required: [accessToken, refreshToken, user]
+      required: [accessToken, accessTokenExpiresAtMs, refreshToken, refreshTokenExpiresAtMs, user]
       properties:
         accessToken:
           type: string
+        accessTokenExpiresAtMs:
+          type: integer
+          format: int64
+          description: Access token expiry as a Unix epoch timestamp in milliseconds.
+          example: 1776593700000
         refreshToken:
           type: string
+        refreshTokenExpiresAtMs:
+          type: integer
+          format: int64
+          description: Refresh token expiry as a Unix epoch timestamp in milliseconds.
+          example: 1779184800000
         user:
           $ref: '#/components/schemas/User'
 

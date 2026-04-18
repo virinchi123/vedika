@@ -90,7 +90,7 @@ Returns a simple liveness payload with the current server timestamp.
 
 ### POST /auth/register
 
-Creates a new user account and immediately opens an authenticated session. The response includes both tokens plus the public user record.
+Creates a new user account and immediately opens an authenticated session. The response includes both tokens, their epoch-millisecond expiry timestamps, and the public user record.
 
 - Auth: none
 - Request body:
@@ -108,7 +108,9 @@ Creates a new user account and immediately opens an authenticated session. The r
 ```json
 {
   "accessToken": "jwt",
+  "accessTokenExpiresAtMs": 1776593700000,
   "refreshToken": "opaque-refresh-token",
+  "refreshTokenExpiresAtMs": 1779184800000,
   "user": {
     "id": "uuid",
     "emailAddress": "person@example.com",
@@ -144,7 +146,9 @@ Authenticates an existing user and creates a new session. The response shape mat
 ```json
 {
   "accessToken": "jwt",
+  "accessTokenExpiresAtMs": 1776593700000,
   "refreshToken": "opaque-refresh-token",
+  "refreshTokenExpiresAtMs": 1779184800000,
   "user": {
     "id": "uuid",
     "emailAddress": "person@example.com",
@@ -162,7 +166,7 @@ Authenticates an existing user and creates a new session. The response shape mat
 
 ### POST /auth/refresh
 
-Rotates a refresh token in place and returns a new access token plus a new refresh token for the same session.
+Rotates a refresh token in place and returns a new access token plus a new refresh token for the same session. The response includes epoch-millisecond expiry timestamps for both tokens.
 
 - Auth: none
 - Request body:
@@ -179,7 +183,9 @@ Rotates a refresh token in place and returns a new access token plus a new refre
 ```json
 {
   "accessToken": "jwt",
+  "accessTokenExpiresAtMs": 1776594600000,
   "refreshToken": "new-opaque-refresh-token",
+  "refreshTokenExpiresAtMs": 1779185700000,
   "user": {
     "id": "uuid",
     "emailAddress": "person@example.com",

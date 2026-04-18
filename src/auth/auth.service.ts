@@ -27,7 +27,9 @@ type LoginUser = Prisma.UserGetPayload<{
 
 type AuthResponse = {
   accessToken: string;
+  accessTokenExpiresAtMs: number;
   refreshToken: string;
+  refreshTokenExpiresAtMs: number;
   user: PublicUser;
 };
 
@@ -39,6 +41,7 @@ type SessionRecord = {
   user: PublicUser;
 };
 
+const accessTokenTtlMs = appConfig.accessTokenTtlMinutes * 60 * 1000;
 const refreshTokenTtlMs = appConfig.refreshTokenTtlDays * 24 * 60 * 60 * 1000;
 
 const buildRefreshTokenExpiry = (): Date => {
@@ -62,23 +65,27 @@ const issueSessionForUser = async (
 ): Promise<{
   sessionId: string;
   refreshToken: string;
+  refreshTokenExpiresAt: Date;
 }> => {
   const refreshToken = generateRefreshToken();
+  const refreshTokenExpiresAt = buildRefreshTokenExpiry();
   const session = await transactionClient.session.create({
     data: {
       userId,
       refreshTokenHash: hashRefreshToken(refreshToken),
       deviceName,
-      expiresAt: buildRefreshTokenExpiry(),
+      expiresAt: refreshTokenExpiresAt,
     },
     select: {
       id: true,
+      expiresAt: true,
     },
   });
 
   return {
     sessionId: session.id,
     refreshToken,
+    refreshTokenExpiresAt: session.expiresAt,
   };
 };
 
@@ -86,17 +93,26 @@ const buildAuthResponse = async ({
   user,
   sessionId,
   refreshToken,
+  refreshTokenExpiresAt,
 }: {
   user: PublicUser;
   sessionId: string;
   refreshToken: string;
+  refreshTokenExpiresAt: Date;
 }): Promise<AuthResponse> => {
+  const accessTokenIssuedAtMs = Math.floor(Date.now() / 1000) * 1000;
+  const accessTokenExpiresAtMs = accessTokenIssuedAtMs + accessTokenTtlMs;
+
   return {
     accessToken: await signAccessToken({
       userId: user.id,
       sessionId,
+      issuedAtMs: accessTokenIssuedAtMs,
+      expiresAtMs: accessTokenExpiresAtMs,
     }),
+    accessTokenExpiresAtMs,
     refreshToken,
+    refreshTokenExpiresAtMs: refreshTokenExpiresAt.getTime(),
     user,
   };
 };
@@ -208,15 +224,19 @@ export const refreshAuthSession = async ({
 }): Promise<AuthResponse> => {
   const session = assertSessionIsActive(await loadSessionByRefreshToken(refreshToken), "Invalid refresh token.");
   const nextRefreshToken = generateRefreshToken();
+  const refreshTokenExpiresAt = buildRefreshTokenExpiry();
 
-  await prisma.session.update({
+  const updatedSession = await prisma.session.update({
     where: {
       id: session.id,
     },
     data: {
       refreshTokenHash: hashRefreshToken(nextRefreshToken),
       deviceName: deviceName ?? undefined,
-      expiresAt: buildRefreshTokenExpiry(),
+      expiresAt: refreshTokenExpiresAt,
+    },
+    select: {
+      expiresAt: true,
     },
   });
 
@@ -224,6 +244,7 @@ export const refreshAuthSession = async ({
     user: session.user,
     sessionId: session.id,
     refreshToken: nextRefreshToken,
+    refreshTokenExpiresAt: updatedSession.expiresAt,
   });
 };
 

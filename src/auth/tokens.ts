@@ -21,9 +21,13 @@ export const hashRefreshToken = (refreshToken: string): string => {
 export const signAccessToken = async ({
   userId,
   sessionId,
+  issuedAtMs,
+  expiresAtMs,
 }: {
   userId: string;
   sessionId: string;
+  issuedAtMs: number;
+  expiresAtMs: number;
 }): Promise<string> => {
   return new SignJWT({
     sid: sessionId,
@@ -31,8 +35,8 @@ export const signAccessToken = async ({
   } satisfies AccessTokenPayload)
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(userId)
-    .setIssuedAt()
-    .setExpirationTime(`${appConfig.accessTokenTtlMinutes}m`)
+    .setIssuedAt(Math.floor(issuedAtMs / 1000))
+    .setExpirationTime(Math.floor(expiresAtMs / 1000))
     .sign(secretKey);
 };
 

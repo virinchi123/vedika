@@ -1,6 +1,6 @@
 # Vedika API Reference
 
-Vedika exposes `49` JSON endpoints: `1` health check, `5` auth routes, and `43` protected business routes.
+Vedika exposes `50` JSON endpoints: `1` health check, `5` auth routes, and `44` protected business routes.
 
 ## Shared Conventions
 
@@ -660,6 +660,46 @@ Deletes a service provider by id. The request is rejected if any `Service` rows 
   - `401` missing or invalid bearer token
   - `404` service provider not found
   - `409` `Cannot delete service provider while services reference it.`
+
+## Files
+
+### POST /files
+
+Creates a file directly linked to an event booking. This is the only file-create flow that requires `eventBookingId`. Existing file usage in call records, payments, and voice notes is unchanged.
+
+- Auth: bearer access token required
+- Request body:
+
+```json
+{
+  "gcsPath": "files/booking-notes.pdf",
+  "extension": "pdf",
+  "originalName": "booking-notes.pdf",
+  "eventBookingId": "uuid"
+}
+```
+
+- Success `201`:
+
+```json
+{
+  "file": {
+    "id": "uuid",
+    "gcsPath": "files/booking-notes.pdf",
+    "extension": "pdf",
+    "originalName": "booking-notes.pdf",
+    "eventBookingId": "uuid",
+    "createdAt": "2026-04-12T10:00:00.000Z",
+    "updatedAt": "2026-04-12T10:00:00.000Z"
+  }
+}
+```
+
+- Common errors:
+  - `400` invalid or missing `gcsPath`, `extension`, or `eventBookingId`
+  - `401` missing or invalid bearer token
+  - `404` referenced event booking not found
+  - `409` duplicate `gcsPath`
 
 ## Call Records
 

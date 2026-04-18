@@ -17,6 +17,7 @@ tags:
   - name: Event Statuses
   - name: Event Types
   - name: Service Providers
+  - name: Files
   - name: Call Records
   - name: Calendar Events
   - name: Payments
@@ -572,6 +573,36 @@ paths:
           $ref: '#/components/responses/UnauthorizedResponse'
         '404':
           $ref: '#/components/responses/NotFoundResponse'
+
+  /files:
+    post:
+      tags: [Files]
+      operationId: createFile
+      summary: Create file
+      description: Creates a file linked directly to an event booking. This endpoint requires `eventBookingId`; existing file usage in call records, payments, and voice notes is unchanged.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FileRequest'
+      responses:
+        '201':
+          description: File created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+        '409':
+          $ref: '#/components/responses/ConflictResponse'
 
   /call-records/{id}:
     get:
@@ -1694,6 +1725,51 @@ components:
             $ref: '#/components/schemas/ServiceProvider'
         pageInfo:
           $ref: '#/components/schemas/PageInfo'
+
+    FileRequest:
+      type: object
+      additionalProperties: false
+      required: [gcsPath, extension, eventBookingId]
+      properties:
+        gcsPath:
+          type: string
+        extension:
+          type: string
+        originalName:
+          type: string
+          nullable: true
+        eventBookingId:
+          type: string
+
+    File:
+      type: object
+      required: [id, gcsPath, extension, originalName, eventBookingId, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        gcsPath:
+          type: string
+        extension:
+          type: string
+        originalName:
+          type: string
+          nullable: true
+        eventBookingId:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    FileEnvelope:
+      type: object
+      required: [file]
+      properties:
+        file:
+          $ref: '#/components/schemas/File'
 
     CallRecordRequest:
       type: object

@@ -24,11 +24,6 @@ const eventBookingTableExists = await (async () => {
 })();
 
 const createReferences = async () => {
-  const bookingStatus = await prisma.bookingStatus.create({
-    data: {
-      name: `Booking Status ${crypto.randomUUID()}`,
-    },
-  });
   const eventStatus = await prisma.eventStatus.create({
     data: {
       name: `Event Status ${crypto.randomUUID()}`,
@@ -41,7 +36,6 @@ const createReferences = async () => {
   });
 
   return {
-    bookingStatus,
     eventStatus,
     eventType,
   };
@@ -59,7 +53,6 @@ const createServiceProviderRecord = async (name: string) => {
 
 type EventBookingPayloadOverrides = Partial<{
   mode: EventBookingMode;
-  bookingStatusId: string;
   eventStatusId: string;
   eventTypeId: string;
   bookingStart: string;
@@ -79,7 +72,6 @@ const buildEventBookingPayload = (
 ) => {
   return {
     mode: EventBookingMode.PHONE_IN,
-    bookingStatusId: references.bookingStatus.id,
     eventStatusId: references.eventStatus.id,
     eventTypeId: references.eventType.id,
     bookingStart: "2026-04-20T10:00:00.000Z",
@@ -108,7 +100,6 @@ const createEventBookingRecord = async (
     phoneNumber2: string | null;
     phoneNumber3: string | null;
     referredBy: string | null;
-    bookingStatusId: string;
     eventStatusId: string;
     eventTypeId: string;
     serviceProviders: {
@@ -121,7 +112,6 @@ const createEventBookingRecord = async (
   return prisma.eventBooking.create({
     data: {
       mode: EventBookingMode.PHONE_IN,
-      bookingStatusId: references.bookingStatus.id,
       eventStatusId: references.eventStatus.id,
       eventTypeId: references.eventType.id,
       bookingStart: new Date("2026-04-20T10:00:00.000Z"),
@@ -265,6 +255,7 @@ describe("event booking routes", { skip: !eventBookingTableExists }, () => {
 
     assert.equal(response.status, 200);
     assert.equal(response.body.eventBooking.id, eventBooking.id);
+    assert.equal("bookingStatusId" in response.body.eventBooking, false);
     assert.deepEqual(response.body.eventBooking.serviceProviderIds, [
       providerOne.id,
       providerTwo.id,
@@ -623,6 +614,7 @@ describe("event booking routes", { skip: !eventBookingTableExists }, () => {
     assert.equal(response.body.eventBooking.phoneNumber1, "9876543210");
     assert.equal(response.body.eventBooking.phoneNumber2, null);
     assert.equal(response.body.eventBooking.referredBy, "Cousin");
+    assert.equal("bookingStatusId" in response.body.eventBooking, false);
     assert.equal(
       response.body.eventBooking.bookingStart,
       "2026-04-20T10:00:00.000Z",
@@ -827,23 +819,6 @@ describe("event booking routes", { skip: !eventBookingTableExists }, () => {
     assert.equal(response.body.error, "customerName must be a string.");
   });
 
-  it("returns not found when booking status does not exist on create", async () => {
-    const accessToken = await registerAndAuthenticate();
-    const references = await createReferences();
-
-    const response = await api
-      .post("/event-bookings")
-      .set("Authorization", `Bearer ${accessToken}`)
-      .send(
-        buildEventBookingPayload(references, {
-          bookingStatusId: "missing-booking-status",
-        }),
-      );
-
-    assert.equal(response.status, 404);
-    assert.equal(response.body.error, "Booking status not found.");
-  });
-
   it("returns not found when event status does not exist on create", async () => {
     const accessToken = await registerAndAuthenticate();
     const references = await createReferences();
@@ -947,6 +922,7 @@ describe("event booking routes", { skip: !eventBookingTableExists }, () => {
     assert.equal(response.body.eventBooking.phoneNumber2, null);
     assert.equal(response.body.eventBooking.phoneNumber3, null);
     assert.equal(response.body.eventBooking.referredBy, null);
+    assert.equal("bookingStatusId" in response.body.eventBooking, false);
     assert.equal(
       response.body.eventBooking.eventTypeId,
       replacementReferences.eventType.id,

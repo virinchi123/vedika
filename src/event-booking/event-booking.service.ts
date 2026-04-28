@@ -21,7 +21,6 @@ const eventBookingSelect = {
   createdAt: true,
   updatedAt: true,
   mode: true,
-  bookingStatusId: true,
   eventStatusId: true,
   eventTypeId: true,
   bookingStart: true,
@@ -70,7 +69,6 @@ type EventBookingDetailRecord = EventBookingGetPayload<{
 
 export type EventBookingPayload = {
   mode: EventBookingMode;
-  bookingStatusId: string;
   eventStatusId: string;
   eventTypeId: string;
   bookingStart: Date;
@@ -109,7 +107,6 @@ export type ListEventBookingsInput = CursorPageParams<EventBookingListCursor> & 
 };
 export type ListEventBookingsResponse = CursorListResult<EventBookingResponse>;
 
-const bookingStatusNotFoundError = () => new HttpError(404, "Booking status not found.");
 const eventStatusNotFoundError = () => new HttpError(404, "Event status not found.");
 const eventTypeNotFoundError = () => new HttpError(404, "Event type not found.");
 const serviceProviderNotFoundError = () => new HttpError(404, "Service provider not found.");
@@ -137,21 +134,6 @@ const serializeEventBookingDetail = (
       commissionPaidAmount: serializeDecimal(service.commissionPaidAmount),
     })),
   };
-};
-
-const assertBookingStatusExists = async (bookingStatusId: string): Promise<void> => {
-  const bookingStatus = await prisma.bookingStatus.findUnique({
-    where: {
-      id: bookingStatusId,
-    },
-    select: {
-      id: true,
-    },
-  });
-
-  if (bookingStatus === null) {
-    throw bookingStatusNotFoundError();
-  }
 };
 
 const assertEventStatusExists = async (eventStatusId: string): Promise<void> => {
@@ -206,7 +188,6 @@ const assertServiceProvidersExist = async (serviceProviderIds: string[]): Promis
 };
 
 const assertReferencesExist = async (data: EventBookingPayload): Promise<void> => {
-  await assertBookingStatusExists(data.bookingStatusId);
   await assertEventStatusExists(data.eventStatusId);
   await assertEventTypeExists(data.eventTypeId);
   await assertServiceProvidersExist(data.serviceProviderIds);
@@ -215,19 +196,6 @@ const assertReferencesExist = async (data: EventBookingPayload): Promise<void> =
 const findMissingReferenceError = async (
   data: EventBookingPayload,
 ): Promise<HttpError | null> => {
-  const bookingStatus = await prisma.bookingStatus.findUnique({
-    where: {
-      id: data.bookingStatusId,
-    },
-    select: {
-      id: true,
-    },
-  });
-
-  if (bookingStatus === null) {
-    return bookingStatusNotFoundError();
-  }
-
   const eventStatus = await prisma.eventStatus.findUnique({
     where: {
       id: data.eventStatusId,

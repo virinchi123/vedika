@@ -162,7 +162,6 @@ export const resetDatabase = async () => {
   await deleteServicesIfTableExists();
   await deleteCustomerInteractionsIfTableExists();
   await deleteEventBookingsIfTableExists();
-  await prisma.bookingStatus.deleteMany();
   await prisma.defaultBookingConfiguration.deleteMany();
   await prisma.eventStatus.deleteMany();
   await prisma.serviceProvider.deleteMany();

@@ -112,8 +112,6 @@ const fileConflictMessages = {
 const eventBookingNotFoundError = () => new HttpError(404, "Event booking not found.");
 const customerInteractionNotFoundError = () =>
   new HttpError(404, "Customer interaction not found.");
-const voiceNoteWalkInOnlyError = () =>
-  new HttpError(400, "voiceNote is only allowed for WALK_IN customer interactions.");
 const clearVoiceNoteRequiredError = () =>
   new HttpError(
     400,
@@ -280,10 +278,6 @@ const deleteVoiceNoteAndMaybeFile = async (
 export const createCustomerInteraction = async (
   data: CreateCustomerInteractionInput,
 ): Promise<CustomerInteractionResponse> => {
-  if (data.voiceNote !== undefined && data.interactionType !== "WALK_IN") {
-    throw voiceNoteWalkInOnlyError();
-  }
-
   await assertEventBookingsExist(prisma, data.eventBookingIds);
   const { eventBookingIds, voiceNote, ...customerInteractionData } = data;
 
@@ -389,13 +383,6 @@ export const updateCustomerInteraction = async (
   id: string,
   data: UpdateCustomerInteractionInput,
 ): Promise<CustomerInteractionResponse> => {
-  if (
-    data.voiceNote !== undefined &&
-    data.voiceNote !== null &&
-    data.interactionType !== "WALK_IN"
-  ) {
-    throw voiceNoteWalkInOnlyError();
-  }
 
   const existingCustomerInteraction = await getCustomerInteractionForMutation(prisma, id);
 

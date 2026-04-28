@@ -153,7 +153,6 @@ const parseEventBookingPayload = (
 
   return {
     mode: parseEventBookingMode(payload.mode),
-    bookingStatusId: ensureRequiredString(payload.bookingStatusId, "bookingStatusId"),
     eventStatusId: ensureRequiredString(payload.eventStatusId, "eventStatusId"),
     eventTypeId: ensureRequiredString(payload.eventTypeId, "eventTypeId"),
     bookingStart: parseRequiredDateTime(payload.bookingStart, "bookingStart"),

@@ -140,18 +140,6 @@ const parseOptionalBoolean = (value: unknown, fieldName: string): boolean => {
   return value;
 };
 
-const ensureVoiceNoteAllowed = (
-  interactionType: CustomerInteractionType,
-  voiceNote: VoiceNoteInput | null | undefined,
-): void => {
-  if (voiceNote !== undefined && voiceNote !== null && interactionType !== "WALK_IN") {
-    throw new HttpError(
-      400,
-      "voiceNote is only allowed for WALK_IN customer interactions.",
-    );
-  }
-};
-
 const parseCreateCustomerInteractionPayload = (
   payload: Record<string, unknown>,
 ): CreateCustomerInteractionInput => {
@@ -164,8 +152,6 @@ const parseCreateCustomerInteractionPayload = (
 
   const interactionType = parseInteractionType(payload.interactionType);
   const voiceNote = parseCreateVoiceNoteInput(payload.voiceNote);
-
-  ensureVoiceNoteAllowed(interactionType, voiceNote);
 
   return {
     interactionType,
@@ -191,8 +177,6 @@ const parseUpdateCustomerInteractionPayload = (
       "clearVoiceNote cannot be true when voiceNote is provided.",
     );
   }
-
-  ensureVoiceNoteAllowed(interactionType, voiceNote);
 
   return {
     interactionType,

@@ -23,11 +23,6 @@ const serviceTableExists = await (async () => {
 })();
 
 const createReferences = async () => {
-  const bookingStatus = await prisma.bookingStatus.create({
-    data: {
-      name: `Booking Status ${crypto.randomUUID()}`,
-    },
-  });
   const eventStatus = await prisma.eventStatus.create({
     data: {
       name: `Event Status ${crypto.randomUUID()}`,
@@ -48,7 +43,6 @@ const createReferences = async () => {
   const eventBooking = await prisma.eventBooking.create({
     data: {
       mode: "PHONE_IN",
-      bookingStatusId: bookingStatus.id,
       eventStatusId: eventStatus.id,
       eventTypeId: eventType.id,
       bookingStart: new Date("2026-04-20T10:00:00.000Z"),
